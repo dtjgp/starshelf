@@ -1,0 +1,86 @@
+"""Stand-in for ClaudeSuggester: answers from the prompt text, without any network or API key."""
+from __future__ import annotations
+
+import re
+import sys
+import time
+from pathlib import Path
+from typing import Any, Callable, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import star_lists_ai as ai  # noqa: E402
+
+LINE = re.compile(r"^(r\d+) \| ([^|]+) \|.*?(?:\| in: ([L\d,]+))?(?: \| archived)?$")
+
+
+def repo_lines(prompt: ai.Prompt) -> list[tuple[str, str, list[str]]]:
+    """[(ref, owner/name, [list refs it is in today])] in prompt order."""
+    out = []
+    for line in prompt.user.splitlines():
+        m = LINE.match(line)
+        if m:
+            out.append((m[1], m[2].strip(), m[3].split(",") if m[3] else []))
+    return out
+
+
+def list_names(prompt: ai.Prompt) -> dict[str, str]:
+    """{"L1": name, ...} in prompt order."""
+    return dict(line.split(" | ", 2)[:2] for line in prompt.user.splitlines() if re.match(r"^L\d+ \| ", line))
+
+
+def list_refs(prompt: ai.Prompt) -> list[str]:
+    return list(list_names(prompt))
+
+
+def keep_and_split(prompt: ai.Prompt) -> dict[str, Any]:
+    """Reorganize: rename L1, drop the last list (its repos go to L1), add a new list with the
+    first three repos, keep everything else where it is, and forget the last repo."""
+    refs = list_refs(prompt)
+    lines = repo_lines(prompt)
+    last = refs[-1]
+    groups: dict[str, list[str]] = {r: [] for r in refs[:-1]}
+    for ref, _, inside in lines[3:-1]:
+        home = [x for x in inside if x != last][:1] or [refs[0]]
+        groups[home[0]].append(ref)
+    names = list_names(prompt)
+    lists = [{"ref": r, "name": ("Renamed by AI" if r == refs[0] else names[r]), "description": "", "repos": groups[r]}
+             for r in refs[:-1]]
+    lists.append({"ref": "", "name": "AI New", "description": "made by the fake", "repos": [l[0] for l in lines[:3]]})
+    return {"lists": lists, "notes": "假的建议：改了一个名字，删了一个列表，新建了一个列表。"}
+
+
+def first_list_plus_new(prompt: ai.Prompt) -> dict[str, Any]:
+    """Incremental: first target -> L2, the others -> a new list N1."""
+    lines = repo_lines(prompt)
+    refs = list_refs(prompt)
+    out = [{"repo": lines[0][0], "lists": [refs[1] if len(refs) > 1 else "N1"]}]
+    out += [{"repo": ref, "lists": ["N1"]} for ref, _, _ in lines[1:]]
+    return {"assignments": out, "new_lists": [{"ref": "N1", "name": "AI Bucket", "description": "new"}],
+            "notes": "假的增量建议。"}
+
+
+class FakeSuggester:
+    def __init__(self, answer: Optional[Callable[[ai.Prompt], Any]] = None, delay: float = 0.0, *,
+                 id: str = "fake", label: str = "Fake AI", provider: str = "Nobody", warning: str = "") -> None:
+        self.id, self.label, self.provider, self.warning = id, label, provider, warning
+        self.model = "fake-model"
+        self.answer = answer
+        self.delay = delay
+        self.available = True
+        self.calls: list[ai.Prompt] = []
+        self.error: Optional[Exception] = None
+
+    def status(self) -> dict[str, Any]:
+        base = {"id": self.id, "label": self.label, "provider": self.provider, "model": self.model,
+                "note": f"{self.label} 的说明", "warning": self.warning}
+        if self.available:
+            return {**base, "available": True, "reason": "", "setup": []}
+        return {**base, "available": False, "reason": "没有找到 Anthropic API key。", "setup": ai.SETUP_KEY}
+
+    def complete(self, prompt: ai.Prompt) -> tuple[dict[str, Any], dict[str, Any]]:
+        self.calls.append(prompt)
+        time.sleep(self.delay)
+        if self.error:
+            raise self.error
+        answer = self.answer or (keep_and_split if prompt.schema is ai.REORG_SCHEMA else first_list_plus_new)
+        return answer(prompt), {"backend": self.id, "model": self.model, "input_tokens": len(prompt.user) // 4, "output_tokens": 321}

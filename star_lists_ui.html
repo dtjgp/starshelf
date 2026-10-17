@@ -1,0 +1,1793 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starshelf</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23C48A12' d='M12 2.6l2.83 6.08 6.67.72-4.98 4.5 1.4 6.56L12 17.1l-5.92 3.36 1.4-6.56-4.98-4.5 6.67-.72z'/%3E%3C/svg%3E">
+<style>
+:root {
+  --paper: #EDF0F4;
+  --panel: #FFFFFF;
+  --sunk: #F5F7FA;
+  --ink: #1B2333;
+  --ink-2: #566175;
+  --ink-3: #8691A4;
+  --rule: #D9DFE7;
+  --rule-2: #E8ECF1;
+  --gold: #B47E0E;
+  --gold-soft: #F7E9C8;
+  --add: #1D8669;
+  --remove: #B0453D;
+  --focus: #3A5FD9;
+  --sel: #E7ECFA;
+  --shadow: 0 14px 36px rgba(18, 28, 48, .18), 0 2px 6px rgba(18, 28, 48, .08);
+  --font: "Avenir Next", "Avenir", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #111722;
+    --panel: #171F2D;
+    --sunk: #131A26;
+    --ink: #E4E8F0;
+    --ink-2: #A3ADBF;
+    --ink-3: #75809A;
+    --rule: #29334499;
+    --rule-2: #212A3A;
+    --gold: #E2B048;
+    --gold-soft: #3A301C;
+    --add: #4CC09E;
+    --remove: #E57E74;
+    --focus: #84A1FF;
+    --sel: #20304F;
+    --shadow: 0 14px 36px rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 14px/1.45 var(--font);
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button {
+  cursor: pointer;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 5px 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+button:hover:not(:disabled) { border-color: var(--ink-3); }
+button:disabled { opacity: .42; cursor: default; }
+button.primary { background: var(--ink); border-color: var(--ink); color: var(--panel); font-weight: 600; }
+button.primary:hover:not(:disabled) { border-color: var(--ink); filter: brightness(1.15); }
+button.ghost { border-color: transparent; background: transparent; }
+button.ghost:hover:not(:disabled) { background: var(--sunk); border-color: transparent; }
+button.danger { color: var(--remove); }
+button.link { border: 0; background: none; padding: 0; color: var(--focus); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--focus); margin: 0; }
+.muted { color: var(--ink-2); }
+.small { font-size: 12.5px; }
+.star path { fill: var(--c, var(--gold)); }
+[hidden] { display: none !important; }
+
+/* ---------- boot ---------- */
+.boot { height: 100%; display: grid; place-items: center; text-align: center; padding: 24px; }
+.boot .star { width: 40px; height: 40px; }
+.boot p { color: var(--ink-2); max-width: 46ch; }
+.boot .spin { animation: turn 2.4s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+
+/* ---------- frame ---------- */
+.app {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+}
+.top {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px 10px 20px;
+  min-height: 56px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 16px; letter-spacing: -.005em; }
+.brand .star { width: 20px; height: 20px; }
+.who { display: flex; flex-direction: column; line-height: 1.25; }
+.who b { font-weight: 600; }
+.top-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.save-state { font-size: 12.5px; color: var(--ink-3); margin-right: 6px; }
+.count {
+  display: inline-block; min-width: 1.7em; margin-left: 7px; padding: 0 6px;
+  border-radius: 9px; background: var(--gold-soft); color: var(--gold);
+  font-size: 12px; font-variant-numeric: tabular-nums; text-align: center;
+}
+
+/* ---------- sidebar ---------- */
+.side { overflow: auto; padding: 14px 12px 28px; }
+.side nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 18px; }
+.vbtn, .lbtn {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  text-align: left; border: 0; background: transparent;
+  padding: 7px 10px; border-radius: 7px; min-width: 0;
+}
+.vbtn:hover, .lbtn:hover { background: color-mix(in srgb, var(--panel) 60%, transparent); }
+.vbtn.on, .litem.on .lbtn { background: var(--panel); box-shadow: 0 0 0 1px var(--rule); font-weight: 600; }
+.n { margin-left: auto; color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 400; }
+.side-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 6px 10px; }
+.side-head h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.lists { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.litem { display: flex; align-items: center; border-radius: 7px; position: relative; }
+.litem .lbtn { flex: 1; }
+.litem .star { width: 14px; height: 14px; flex: none; }
+.lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.litem .edit {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  opacity: 0; padding: 2px 9px; font-size: 12px;
+  background: var(--panel); border: 1px solid var(--rule);
+}
+.litem:hover .edit, .litem .edit:focus-visible, .litem.doomed .edit { opacity: 1; }
+.litem:hover .n, .litem:focus-within .n, .litem.doomed .n { visibility: hidden; }
+.litem.doomed .lname { text-decoration: line-through; color: var(--ink-3); }
+.litem.drop .lbtn, .vbtn.drop { background: color-mix(in srgb, var(--c, var(--focus)) 16%, var(--panel)); box-shadow: 0 0 0 1.5px var(--c, var(--focus)); }
+.flag { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); flex: none; }
+.badge { font-size: 11px; line-height: 17px; padding: 0 6px; border-radius: 4px; background: var(--gold-soft); color: var(--gold); font-weight: 600; flex: none; }
+.badge.del { background: color-mix(in srgb, var(--remove) 14%, var(--panel)); color: var(--remove); }
+.hint { margin: 14px 10px 0; font-size: 12.5px; color: var(--ink-2); }
+.empty-side { padding: 6px 10px; color: var(--ink-3); font-size: 13px; }
+
+/* ---------- main ---------- */
+.main { overflow: auto; background: var(--panel); border-left: 1px solid var(--rule); }
+.sticky { position: sticky; top: 0; z-index: 3; background: var(--panel); border-bottom: 1px solid var(--rule); }
+.view-head { display: flex; align-items: flex-start; gap: 16px; padding: 22px 24px 8px; }
+.view-head .titles { min-width: 0; flex: 1; }
+.view-head h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -.012em; display: flex; align-items: center; gap: 11px; flex-wrap: wrap; }
+.view-head h1 .star { width: 22px; height: 22px; }
+.view-head p { margin: 5px 0 0; color: var(--ink-2); max-width: 46em; }
+.banner { margin: 8px 24px 4px; padding: 9px 12px; border-radius: 8px; background: color-mix(in srgb, var(--remove) 9%, var(--panel)); color: var(--ink); display: flex; gap: 12px; align-items: center; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 24px 12px; }
+.search { position: relative; flex: 1 1 240px; max-width: 420px; }
+.search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; stroke: var(--ink-3); fill: none; stroke-width: 2; }
+.search input { width: 100%; padding: 7px 30px 7px 32px; border: 1px solid var(--rule); border-radius: 8px; background: var(--sunk); }
+.search input:not(:placeholder-shown) + kbd { display: none; }
+.search kbd { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font: 12px var(--font); color: var(--ink-3); border: 1px solid var(--rule); border-radius: 4px; padding: 0 5px; }
+select { padding: 6px 8px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); }
+.toggle { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--rule); border-radius: 8px; cursor: pointer; user-select: none; }
+.listhead { display: flex; align-items: center; gap: 10px; padding: 7px 24px; min-height: 42px; border-top: 1px solid var(--rule-2); font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+.listhead.has-sel { background: var(--sel); color: var(--ink); }
+.listhead .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.listhead .acts button { padding: 4px 10px; font-size: 13px; }
+
+.rows { padding-bottom: 80px; }
+.row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 128px minmax(190px, 32%);
+  gap: 14px; align-items: start;
+  padding: 11px 24px; border-bottom: 1px solid var(--rule-2);
+  position: relative; cursor: default;
+}
+.row:hover { background: var(--sunk); }
+.row.sel { background: var(--sel); }
+.row.changed::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--gold); }
+.row.gone .what, .row.gone .meta { opacity: .5; }
+.row.unstarring::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--remove); }
+.row.unstarring .name .repo { text-decoration: line-through; text-decoration-color: var(--remove); }
+.tag.del { color: var(--remove); border-color: color-mix(in srgb, var(--remove) 45%, var(--rule)); }
+.unstar-note { margin: 4px 0 0; font-size: 12.5px; color: var(--remove); display: flex; gap: 10px; align-items: center; }
+.opt.danger { color: var(--remove); }
+.confirm-unstar { margin-top: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--remove) 45%, var(--rule)); align-items: flex-start; }
+.confirm-unstar input { margin-top: 3px; }
+.row > input { margin-top: 3px; }
+.what { min-width: 0; }
+.name { color: var(--ink); text-decoration: none; font-weight: 600; font-size: 14.5px; overflow-wrap: anywhere; }
+.name .owner { font-weight: 400; color: var(--ink-2); }
+.name:hover .repo { text-decoration: underline; text-underline-offset: 2px; }
+.tag { display: inline-block; margin-left: 8px; font-size: 11.5px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--rule); color: var(--ink-2); vertical-align: 1px; }
+.desc { margin: 3px 0 0; color: var(--ink-2); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.gone-note { margin: 4px 0 0; font-size: 12.5px; color: var(--remove); display: flex; gap: 10px; align-items: center; }
+.meta { font-size: 12.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 1px; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.meta .stars { color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 1px; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; height: 23px; max-width: 100%;
+  border-radius: 12px; font-size: 12px; white-space: nowrap;
+  background: color-mix(in srgb, var(--c) 13%, var(--panel));
+  color: color-mix(in srgb, var(--c) 58%, var(--ink));
+  border: 1px solid color-mix(in srgb, var(--c) 32%, transparent);
+}
+.chip button { border: 0; background: transparent; height: 100%; color: inherit; font-size: 12px; border-radius: 12px; }
+.chip .cn { padding: 0 3px 0 9px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.chip .x { padding: 0 8px 0 4px; opacity: .55; font-size: 13px; }
+.chip .x:hover { opacity: 1; }
+.chip.added { box-shadow: 0 0 0 1.5px var(--gold); }
+.chip.removed, .chip.doomed {
+  background: transparent; border: 1px dashed var(--rule); color: var(--ink-3);
+  text-decoration: line-through; padding: 0 9px;
+}
+.chip.removed { cursor: pointer; }
+.chip.removed:hover { color: var(--ink); border-color: var(--ink-3); }
+.chip-add { height: 23px; width: 28px; padding: 0; border-radius: 12px; border: 1px dashed var(--ink-3); background: transparent; color: var(--ink-2); font-size: 15px; line-height: 1; }
+.empty { padding: 56px 24px; text-align: center; color: var(--ink-2); }
+.empty .star { width: 28px; height: 28px; opacity: .6; }
+.empty p { max-width: 50ch; margin: 10px auto 0; }
+
+/* ---------- popover ---------- */
+.popover {
+  position: fixed; z-index: 50; width: 292px; max-height: min(440px, 72vh);
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; box-shadow: var(--shadow);
+}
+.popover .ph { padding: 11px 12px 7px; font-weight: 600; font-size: 13px; }
+.popover input[type=search] { margin: 0 10px 6px; padding: 6px 9px; border: 1px solid var(--rule); border-radius: 7px; background: var(--sunk); }
+.popover .opts { overflow: auto; padding: 2px 6px 6px; }
+.opt { display: flex; gap: 10px; align-items: center; width: 100%; border: 0; background: transparent; padding: 7px 8px; border-radius: 6px; text-align: left; }
+.opt:hover, .opt:focus-visible { background: var(--sunk); }
+.opt .star { width: 13px; height: 13px; flex: none; }
+.opt .on { margin-left: auto; color: var(--add); font-weight: 700; }
+.opt .n { margin-left: auto; }
+.popover .pf { border-top: 1px solid var(--rule-2); padding: 5px 6px; }
+
+/* ---------- dialogs ---------- */
+dialog {
+  border: 1px solid var(--rule); border-radius: 12px; padding: 0;
+  background: var(--panel); color: var(--ink);
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  box-shadow: var(--shadow);
+}
+dialog.wide { width: min(840px, calc(100vw - 32px)); }
+dialog[open] { display: flex; flex-direction: column; }
+dialog::backdrop { background: rgba(14, 20, 32, .4); }
+.dlg { padding: 22px 24px 18px; overflow: auto; }
+.dlg h2 { margin: 0 0 6px; font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.dlg h3 { margin: 18px 0 6px; font-size: 14px; font-weight: 600; }
+.dlg .lead { margin: 4px 0 0; color: var(--ink-2); }
+.dlg-actions { display: flex; gap: 8px; align-items: center; padding: 13px 24px; border-top: 1px solid var(--rule-2); background: var(--sunk); border-radius: 0 0 12px 12px; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.field { display: block; margin-top: 14px; font-size: 13px; color: var(--ink-2); }
+.field input, .field textarea {
+  display: block; width: 100%; margin-top: 5px; padding: 8px 10px;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--sunk); color: var(--ink); font-size: 14px;
+}
+.field textarea { resize: vertical; min-height: 56px; }
+.field-error { margin: 6px 0 0; color: var(--remove); font-size: 13px; }
+fieldset { border: 0; padding: 0; margin: 14px 0 0; }
+legend { font-size: 13px; color: var(--ink-2); padding: 0; margin-bottom: 6px; }
+.radio, .check { display: flex; gap: 8px; align-items: center; margin: 4px 0; cursor: pointer; }
+.ops { list-style: none; margin: 0; padding: 0; }
+.op { display: flex; gap: 10px; padding: 5px 0; align-items: baseline; }
+.sign { width: 14px; font-weight: 700; text-align: center; flex: none; }
+.op.add .sign { color: var(--add); }
+.op.edit .sign { color: var(--gold); }
+.op.del .sign { color: var(--remove); }
+.ptable { border: 1px solid var(--rule-2); border-radius: 8px; max-height: 320px; overflow: auto; }
+.prow { display: grid; grid-template-columns: minmax(160px, 38%) 1fr; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--rule-2); font-size: 13px; }
+.prow:last-child { border-bottom: 0; }
+.prepo { overflow-wrap: anywhere; font-weight: 500; }
+.pchg { display: flex; flex-wrap: wrap; gap: 5px 10px; }
+.pc.add { color: var(--add); }
+.pc.del { color: var(--remove); }
+.pc.keep { color: var(--ink-3); }
+.notes { margin: 14px 0 0; padding: 0 0 0 18px; color: var(--ink-2); font-size: 13px; }
+.errors { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: color-mix(in srgb, var(--remove) 10%, var(--panel)); color: var(--ink); }
+.errors ul { margin: 6px 0 0; padding-left: 18px; }
+.foot { margin-top: 16px; font-size: 12.5px; color: var(--ink-2); }
+.bar { height: 8px; border-radius: 4px; background: var(--rule-2); overflow: hidden; margin: 16px 0 8px; }
+.bar i { display: block; height: 100%; background: var(--gold); width: 0; transition: width .35s ease; }
+.bar.indet i { width: 30%; animation: slide 1.4s ease-in-out infinite; }
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+details { margin-top: 12px; }
+details pre { max-height: 220px; overflow: auto; background: var(--sunk); border-radius: 8px; padding: 10px 12px; font-size: 12px; white-space: pre-wrap; }
+.errtext { white-space: pre-wrap; background: var(--sunk); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.snaps { margin-top: 12px; border: 1px solid var(--rule-2); border-radius: 8px; }
+.snap { display: grid; grid-template-columns: 92px 1fr auto; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--rule-2); align-items: center; font-size: 13px; }
+.snap:last-child { border-bottom: 0; }
+.snap .kind { color: var(--ink-2); }
+.ai-mode { margin: 6px 0; padding: 10px 12px; border: 1px solid var(--rule-2); border-radius: 8px; }
+.ai-mode.on { border-color: var(--ink-3); background: var(--sunk); }
+.ai-mode .radio { font-weight: 600; margin: 0; }
+.ai-mode .sub { margin: 4px 0 0 23px; font-size: 13px; color: var(--ink-2); }
+.ai-mode .opts { margin: 8px 0 0 23px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.ai-mode .opts input[type=number] { width: 64px; padding: 3px 6px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
+.ai-notes { margin: 12px 0 0; padding: 10px 14px; border-left: 3px solid var(--rule); background: var(--sunk); border-radius: 0 8px 8px 0; font-size: 13.5px; white-space: pre-wrap; }
+.ai-lists { margin-top: 6px; border: 1px solid var(--rule-2); border-radius: 8px; max-height: 340px; overflow: auto; }
+.ai-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--rule-2); font-size: 13px; }
+.ai-row:last-child { border-bottom: 0; }
+.ai-row .star { width: 14px; height: 14px; }
+.ai-row .nm { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.ai-row .nm span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-row .cnt { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-row .cnt .pc { margin-left: 8px; }
+.ai-row.doomed .nm span:first-child { text-decoration: line-through; color: var(--ink-3); }
+.warn { margin-top: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--remove) 40%, var(--rule)); font-size: 13px; }
+.warn b { color: var(--remove); }
+.ai-backend { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.ai-backend .small { flex-basis: 100%; }
+.setup { margin: 8px 0 0; padding: 8px 10px; background: var(--panel); border-radius: 6px; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
+
+/* ---------- toast & drag ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60;
+  background: var(--ink); color: var(--panel); padding: 9px 10px 9px 16px; border-radius: 9px;
+  display: flex; gap: 14px; align-items: center; box-shadow: var(--shadow); max-width: calc(100vw - 32px);
+}
+.toast button { border: 0; background: transparent; color: var(--gold-soft); font-weight: 600; padding: 3px 8px; }
+@media (prefers-color-scheme: dark) { .toast button { color: var(--gold); } }
+.ghostdrag { position: fixed; top: -200px; left: -200px; padding: 6px 11px; border-radius: 7px; background: var(--ink); color: var(--panel); font-size: 13px; }
+
+/* ---------- narrow ---------- */
+@media (max-width: 980px) {
+  .row { grid-template-columns: 24px minmax(0, 1fr); }
+  .row .meta { grid-column: 2; flex-direction: row; gap: 12px; padding: 0; }
+  .row .chips { grid-column: 2; }
+}
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); }
+  .side { max-height: 34vh; border-bottom: 1px solid var(--rule); padding: 10px 12px; }
+  .main { border-left: 0; }
+  .view-head, .toolbar, .listhead, .row { padding-left: 16px; padding-right: 16px; }
+  .top { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<div id="boot" class="boot">
+  <div>
+    <svg class="star spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.83 6.08 6.67.72-4.98 4.5 1.4 6.56L12 17.1l-5.92 3.36 1.4-6.56-4.98-4.5 6.67-.72z"/></svg>
+    <p id="bootMsg">正在从 GitHub 读取你的 star 和列表…</p>
+    <button id="bootRetry" hidden>重试</button>
+  </div>
+</div>
+
+<div id="app" class="app" hidden>
+  <header class="top">
+    <div class="brand">
+      <svg class="star" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.83 6.08 6.67.72-4.98 4.5 1.4 6.56L12 17.1l-5.92 3.36 1.4-6.56-4.98-4.5 6.67-.72z"/></svg>
+      Starshelf
+    </div>
+    <div class="who"><b id="login"></b><span id="synced" class="muted small"></span></div>
+    <div class="top-actions">
+      <span id="saveState" class="save-state"></span>
+      <button id="btnUndo" class="ghost" title="撤销 (⌘Z)">撤销</button>
+      <button id="btnRedo" class="ghost" title="重做 (⇧⌘Z)">重做</button>
+      <button id="btnBackups" class="ghost">备份</button>
+      <button id="btnRefresh" class="ghost">重新读取</button>
+      <button id="btnDiscard" class="ghost danger">放弃修改</button>
+      <button id="btnAI" title="让 Claude 给出归类建议（只改草稿，不会直接写入 GitHub）">AI 建议</button>
+      <button id="btnReview" class="primary">预览修改<span id="changeCount" class="count">0</span></button>
+    </div>
+  </header>
+
+  <aside class="side" aria-label="视图和列表">
+    <nav>
+      <button class="vbtn" data-view="all"><span>全部 star</span><span class="n" id="nAll"></span></button>
+      <button class="vbtn" data-view="none"><span>不在任何列表</span><span class="n" id="nNone"></span></button>
+      <button class="vbtn" data-view="unstar" id="vUnstar" hidden><span>将取消 star</span><span class="n" id="nUnstar"></span></button>
+    </nav>
+    <div class="side-head">
+      <h2>列表</h2>
+      <button id="btnNewList" class="ghost small">新建列表</button>
+    </div>
+    <ul id="lists" class="lists"></ul>
+    <p id="dragHint" class="hint" hidden>拖到列表上即可加入。按住 ⌥ Option 改为移动。拖到「不在任何列表」会移出所有列表。</p>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="sticky">
+      <div class="view-head">
+        <div class="titles">
+          <h1 id="viewTitle"></h1>
+          <p id="viewDesc"></p>
+        </div>
+        <button id="btnEditList" hidden>编辑列表</button>
+      </div>
+      <div id="banner" class="banner" hidden></div>
+      <div class="toolbar">
+        <label class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="q" type="search" placeholder="搜索仓库名或描述" autocomplete="off" aria-label="搜索仓库">
+          <kbd>/</kbd>
+        </label>
+        <select id="lang" aria-label="按语言筛选"></select>
+        <select id="sort" aria-label="排序">
+          <option value="starred">最近 star</option>
+          <option value="name">名称</option>
+          <option value="stars">star 最多</option>
+          <option value="pushed">最近更新</option>
+        </select>
+        <label class="toggle"><input type="checkbox" id="changedOnly"> 只看改动</label>
+      </div>
+      <div id="listhead" class="listhead">
+        <input type="checkbox" id="selAll" aria-label="全选当前显示的仓库">
+        <span id="countLabel"></span>
+        <div id="acts" class="acts" hidden>
+          <button id="bAdd">加入列表…</button>
+          <button id="bMove">移动到…</button>
+          <button id="bRemove"></button>
+          <button id="bClear">移出所有列表</button>
+          <button id="bUnstar" class="danger">取消 star</button>
+          <button id="bKeep">保留 star</button>
+          <button id="bDeselect" class="ghost">取消选择</button>
+        </div>
+      </div>
+    </div>
+    <div id="rows" class="rows"></div>
+  </main>
+</div>
+
+<div id="popover" class="popover" hidden role="dialog"></div>
+<div id="toast" class="toast" hidden role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastUndo">撤销</button></div>
+<div id="ghostdrag" class="ghostdrag" aria-hidden="true"></div>
+
+<dialog id="listDialog" aria-labelledby="ldTitle">
+  <form id="listForm" novalidate>
+    <div class="dlg">
+      <h2 id="ldTitle">新建列表</h2>
+      <label class="field">名称<input id="ldName" maxlength="100" autocomplete="off" required></label>
+      <p id="ldErr" class="field-error" hidden></p>
+      <label class="field">描述（可选）<textarea id="ldDesc" maxlength="300" rows="2"></textarea></label>
+      <fieldset>
+        <legend>谁能看到</legend>
+        <label class="radio"><input type="radio" name="vis" value="public"> 公开，显示在你的 GitHub 主页</label>
+        <label class="radio"><input type="radio" name="vis" value="private"> 私密，只有你能看到</label>
+      </fieldset>
+      <label class="check" id="ldWithWrap" hidden><input type="checkbox" id="ldWith"> <span id="ldWithText"></span></label>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" id="ldDelete" class="ghost danger" hidden>删除列表</button>
+      <span class="spacer"></span>
+      <button type="button" id="ldCancel">取消</button>
+      <button type="submit" id="ldSave" class="primary">创建</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="reviewDialog" class="wide" aria-label="预览修改">
+  <div class="dlg" id="rvBody"></div>
+  <div class="dlg-actions" id="rvActions"></div>
+</dialog>
+
+<dialog id="aiDialog" class="wide" aria-label="AI 归类建议">
+  <div class="dlg" id="aiBody"></div>
+  <div class="dlg-actions" id="aiActions"></div>
+</dialog>
+
+<dialog id="backupDialog" class="wide" aria-labelledby="bkTitle">
+  <div class="dlg">
+    <h2 id="bkTitle">备份与恢复</h2>
+    <p class="lead">每次应用前都会自动备份 GitHub 上的当前状态。恢复会把列表和归属改回备份时的样子，不会取消任何 star。</p>
+    <p id="bkNote" class="errors" hidden>你有未应用的修改。请先应用或放弃，再恢复备份。</p>
+    <div id="bkList" class="snaps"></div>
+  </div>
+  <div class="dlg-actions"><span class="spacer"></span><button id="bkClose">关闭</button></div>
+</dialog>
+
+<script>
+(() => {
+"use strict";
+
+// ------------------------------------------------------------------ basics
+// List colours. Gold is deliberately absent: in this app gold only ever means "changed".
+const PALETTE = ["#3E6FD8", "#D9822B", "#2E9E6A", "#C2417A", "#7B5BD6", "#1B9AAA", "#D1493F",
+                 "#6E8B2E", "#8E5A3C", "#5B6B8C", "#D16A9E", "#9A4FB0", "#2A9D8F", "#3C7DA6"];
+const STAR = "M12 2.6l2.83 6.08 6.67.72-4.98 4.5 1.4 6.56L12 17.1l-5.92 3.36 1.4-6.56-4.98-4.5 6.67-.72z";
+const SVGNS = "http://www.w3.org/2000/svg";
+const $ = (s, r = document) => r.querySelector(s);
+const TOKEN = (() => {
+  const t = new URLSearchParams(location.hash.slice(1)).get("t");
+  try { if (t) sessionStorage.setItem("sl-token", t); else return sessionStorage.getItem("sl-token") || ""; } catch (_) {}
+  return t || "";
+})();
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k === "dataset") Object.assign(el.dataset, v);
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, "");
+    else el.setAttribute(k, v);
+  }
+  for (const c of kids.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    el.append(c instanceof Node ? c : String(c));
+  }
+  return el;
+}
+function star(color, size) {
+  const s = document.createElementNS(SVGNS, "svg");
+  s.setAttribute("viewBox", "0 0 24 24");
+  s.setAttribute("aria-hidden", "true");
+  s.classList.add("star");
+  if (size) { s.setAttribute("width", size); s.setAttribute("height", size); }
+  if (color) s.style.setProperty("--c", color);
+  const p = document.createElementNS(SVGNS, "path");
+  p.setAttribute("d", STAR);
+  s.append(p);
+  return s;
+}
+const fmtNum = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
+  : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k" : String(n || 0);
+const fmtTime = iso => {
+  if (!iso) return "";
+  try { return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)); }
+  catch (_) { return iso; }
+};
+const isTyping = () => { const a = document.activeElement; return a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT") && a.type !== "checkbox"; };
+
+async function api(method, path, body) {
+  const opts = { method, headers: { "X-Session": TOKEN } };
+  if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  const res = await fetch(path, opts);
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) throw new Error((data && data.error) || `请求失败（HTTP ${res.status}）`);
+  return data;
+}
+
+// ------------------------------------------------------------------ state
+const S = {
+  login: "", fetchedAt: "",
+  repos: new Map(),          // id -> repo
+  base: new Map(),           // list key -> {name, description, private, items:Set}
+  lists: [],                 // draft lists [{key,id,name,description,private,items:Set,deleted,color}]
+  view: "all", q: "", lang: "", sort: "starred", changedOnly: false,
+  sel: new Set(), anchor: null, visible: [],
+  undo: [], redo: [], newSeq: 1,
+  unstar: new Set(),         // repo ids whose star the draft removes (they are in no list)
+  drag: null, review: null, job: null, poll: null, saveTimer: null,
+};
+
+function setBaseline(b) {
+  S.login = b.login;
+  S.fetchedAt = b.fetched_at;
+  S.repos = new Map(b.repos.map(r => [r.id, r]));
+  S.base = new Map(b.lists.map(l => [l.id, { name: l.name, description: l.description || "", private: !!l.private, items: new Set(l.items) }]));
+  S.lists = b.lists.map(l => ({ key: l.id, id: l.id, name: l.name, description: l.description || "", private: !!l.private, items: new Set(l.items), deleted: false, color: null }));
+  assignColors(S.lists);
+  S.newSeq = 1; S.undo = []; S.redo = []; S.sel.clear(); S.anchor = null; S.unstar = new Set();
+  if (!SPECIAL.has(S.view) && !findList(S.view)) S.view = "all";
+  fillLanguages();
+}
+const serializeLists = () => S.lists.map(l => ({ key: l.key, id: l.id, name: l.name, description: l.description, private: l.private, deleted: l.deleted, color: l.color, items: [...l.items] }));
+function loadLists(arr) {
+  S.lists = arr.map(l => ({ ...l, items: new Set(l.items.filter(id => S.repos.has(id))) }));
+  if (!SPECIAL.has(S.view) && !findList(S.view)) S.view = "all";
+}
+const SPECIAL = new Set(["all", "none", "unstar"]);
+function loadUnstar(ids) { S.unstar = new Set((ids || []).filter(id => S.repos.has(id) && S.repos.get(id).starred)); }
+// Undo/redo/autosave snapshots: the lists plus the repos marked to unstar.
+const snapState = () => JSON.stringify({ lists: serializeLists(), unstar: [...S.unstar] });
+function loadState(json) {
+  const o = JSON.parse(json);
+  if (Array.isArray(o)) { loadLists(o); S.unstar = new Set(); } else { loadLists(o.lists); loadUnstar(o.unstar); }
+}
+const findList = key => S.lists.find(l => l.key === key);
+const alive = () => S.lists.filter(l => !l.deleted);
+const colorOf = l => PALETTE[(l.color || 0) % PALETTE.length];
+
+// A list keeps its colour across reloads, renames and deletions of other lists (remembered in
+// this browser by list id and by name; a new list gets the least-used colour).
+const COLOR_KEY = "sl-colors";
+function colorMap() { try { return JSON.parse(localStorage.getItem(COLOR_KEY) || "{}") || {}; } catch (_) { return {}; } }
+function saveColorMap(m) { try { localStorage.setItem(COLOR_KEY, JSON.stringify(m)); } catch (_) {} }
+function leastUsed(lists) {
+  const used = new Map();
+  lists.forEach(l => l.color != null && used.set(l.color, (used.get(l.color) || 0) + 1));
+  let best = 0, bestN = Infinity;
+  for (let i = 0; i < PALETTE.length; i++) { const n = used.get(i) || 0; if (n < bestN) { best = i; bestN = n; } }
+  return best;
+}
+function assignColors(lists) {
+  const m = colorMap();
+  for (const l of lists) {
+    const c = (l.id && m["id:" + l.id] != null) ? m["id:" + l.id] : m["name:" + l.name];
+    l.color = Number.isInteger(c) && c < PALETTE.length ? c : null;
+  }
+  for (const l of lists) if (l.color == null) l.color = leastUsed(lists);
+  lists.forEach(l => rememberColor(l, m));
+  saveColorMap(m);
+}
+function rememberColor(l, m) {
+  const map = m || colorMap();
+  if (l.id) map["id:" + l.id] = l.color;
+  map["name:" + l.name] = l.color;
+  if (!m) saveColorMap(map);
+}
+const nextColor = () => leastUsed(S.lists.filter(l => !l.deleted));
+const inAny = id => S.lists.some(l => !l.deleted && l.items.has(id));
+const unlistedIds = () => [...S.repos.values()].filter(r => r.starred && !inAny(r.id) && !S.unstar.has(r.id)).map(r => r.id);
+const viewList = () => SPECIAL.has(S.view) ? null : findList(S.view);
+
+function repoDiff(id) {
+  const added = [], removed = [];
+  for (const l of S.lists) {
+    const base = S.base.get(l.key);
+    const was = !!(base && base.items.has(id));
+    const now = !l.deleted && l.items.has(id);
+    if (l.deleted) continue;           // deleting a list is counted as a list change
+    if (now && !was) added.push(l.key);
+    if (was && !now) removed.push(l.key);
+  }
+  return { added, removed, changed: added.length + removed.length > 0 || S.unstar.has(id) };
+}
+function listEdited(l) {
+  const b = S.base.get(l.key);
+  return !!b && !l.deleted && (b.name !== l.name || b.description !== l.description || b.private !== l.private);
+}
+function listTouched(l) {
+  if (!l.id || l.deleted || listEdited(l)) return true;
+  const b = S.base.get(l.key);
+  if (b.items.size !== l.items.size) return true;
+  for (const id of l.items) if (!b.items.has(id)) return true;
+  return false;
+}
+function summary() {
+  let creates = 0, deletes = 0, edits = 0, members = 0;
+  for (const l of S.lists) {
+    if (!l.id) { if (!l.deleted) creates++; continue; }
+    if (l.deleted) deletes++;
+    else if (listEdited(l)) edits++;
+  }
+  for (const id of S.repos.keys()) if (repoDiff(id).changed) members++;
+  return { creates, deletes, edits, members, unstars: S.unstar.size, total: creates + deletes + edits + members };
+}
+
+// ------------------------------------------------------------------ edits
+function commit(fn) {
+  const before = snapState();
+  fn();
+  const after = snapState();
+  if (before === after) return false;
+  S.undo.push(before);
+  if (S.undo.length > 200) S.undo.shift();
+  S.redo = [];
+  afterEdit();
+  return true;
+}
+function afterEdit() { render(); scheduleSave(); }
+function undo() {
+  if (!S.undo.length) return;
+  S.redo.push(snapState());
+  loadState(S.undo.pop());
+  afterEdit(); toast("已撤销", false);
+}
+function redo() {
+  if (!S.redo.length) return;
+  S.undo.push(snapState());
+  loadState(S.redo.pop());
+  afterEdit(); toast("已重做", false);
+}
+const addRaw = (key, ids) => { const l = findList(key); ids.forEach(id => { l.items.add(id); S.unstar.delete(id); }); };
+const removeRaw = (key, ids) => { const l = findList(key); ids.forEach(id => l.items.delete(id)); };
+const clearRaw = ids => alive().forEach(l => ids.forEach(id => l.items.delete(id)));
+const plural = ids => ids.length === 1 ? (S.repos.get(ids[0]) || {}).full_name : `${ids.length} 个仓库`;
+
+function doAdd(key, ids) {
+  const l = findList(key);
+  if (commit(() => addRaw(key, ids))) toast(`已把 ${plural(ids)} 加入「${l.name}」`);
+  else toast(`${plural(ids)} 已经在「${l.name}」里`, false);
+}
+function doRemove(key, ids) {
+  const l = findList(key);
+  if (commit(() => removeRaw(key, ids))) { toast(`已把 ${plural(ids)} 移出「${l.name}」`); }
+}
+function doMove(from, to, ids) {
+  const a = findList(from), b = findList(to);
+  if (commit(() => { removeRaw(from, ids); addRaw(to, ids); })) toast(`已把 ${plural(ids)} 从「${a.name}」移到「${b.name}」`);
+}
+function doClear(ids) {
+  if (commit(() => clearRaw(ids))) toast(`已把 ${plural(ids)} 移出所有列表`);
+}
+// Unstar is a draft mark: the repo leaves every list now, and its star goes only when applied.
+function doUnstar(ids) {
+  ids = ids.filter(id => S.repos.get(id).starred && !S.unstar.has(id));
+  if (!ids.length) return;
+  if (commit(() => { clearRaw(ids); ids.forEach(id => S.unstar.add(id)); })) {
+    toast(`已标记 ${plural(ids)} 取消 star（应用到 GitHub 时才会执行）`);
+  }
+}
+function doKeepStar(ids) {
+  ids = ids.filter(id => S.unstar.has(id));
+  if (!ids.length) return;
+  commit(() => ids.forEach(id => {
+    S.unstar.delete(id);
+    for (const l of alive()) { const b = S.base.get(l.key); if (b && b.items.has(id)) l.items.add(id); }
+  }));
+  toast(`${plural(ids)} 会保留 star`);
+}
+
+// ------------------------------------------------------------------ saving
+// Every edit is saved right away; saves never overlap, and the newest state always wins.
+const SAVE = { busy: false, again: false };
+function draftBody() {
+  const dirty = summary().total > 0 || S.lists.some(l => !l.id);
+  return { dirty, body: { draft: dirty ? { fetched_at: S.fetchedAt, newSeq: S.newSeq, lists: serializeLists(), unstar: [...S.unstar] } : null } };
+}
+function scheduleSave() {
+  $("#saveState").textContent = "正在保存草稿…";
+  if (SAVE.busy) { SAVE.again = true; return; }
+  saveDraft();
+}
+async function saveDraft() {
+  SAVE.busy = true; SAVE.again = false;
+  const { dirty, body } = draftBody();
+  try {
+    await api("PUT", "/api/draft", body);
+    if (!SAVE.again) $("#saveState").textContent = dirty ? "草稿已自动保存" : "";
+  } catch (err) {
+    $("#saveState").textContent = "草稿保存失败：" + err.message;
+  } finally {
+    SAVE.busy = false;
+    if (SAVE.again) saveDraft();
+  }
+}
+function flushOnExit() {
+  if (!SAVE.busy && !SAVE.again) return;
+  try {
+    fetch("/api/draft", { method: "PUT", keepalive: true, body: JSON.stringify(draftBody().body),
+      headers: { "X-Session": TOKEN, "Content-Type": "application/json" } });
+  } catch (_) {}
+}
+window.addEventListener("pagehide", flushOnExit);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushOnExit(); });
+
+// ------------------------------------------------------------------ rendering
+function render() { renderTop(); renderSide(); renderMain(); }
+
+function renderTop() {
+  const s = summary();
+  $("#login").textContent = "@" + S.login;
+  $("#synced").textContent = "读取于 " + fmtTime(S.fetchedAt);
+  $("#btnUndo").disabled = !S.undo.length;
+  $("#btnRedo").disabled = !S.redo.length;
+  $("#btnDiscard").disabled = s.total === 0;
+  const running = S.job && S.job.status === "running";
+  const refresh = $("#btnRefresh");
+  refresh.disabled = s.total > 0 || running;
+  refresh.title = s.total > 0 ? "有未应用的修改时不能重新读取。请先应用或放弃修改。" : "从 GitHub 读取最新的 star 和列表";
+  $("#btnAI").textContent = AI.waiting ? "AI 生成中…" : AI.proposal ? "查看 AI 建议" : "AI 建议";
+  const review = $("#btnReview");
+  review.replaceChildren();
+  if (running) {
+    review.disabled = false;
+    review.append(S.job.total ? `正在应用 ${S.job.step}/${S.job.total}` : "正在应用…");
+  } else {
+    review.disabled = s.total === 0;
+    review.append("预览修改", h("span", { class: "count", id: "changeCount" }, s.total));
+  }
+}
+
+function renderSide() {
+  $("#nAll").textContent = [...S.repos.values()].filter(r => r.starred).length;
+  $("#nNone").textContent = unlistedIds().length;
+  if (!S.unstar.size && S.view === "unstar") S.view = "all";
+  $("#vUnstar").hidden = !S.unstar.size;
+  $("#nUnstar").textContent = S.unstar.size;
+  document.querySelectorAll(".vbtn").forEach(b => b.classList.toggle("on", b.dataset.view === S.view));
+  const ul = $("#lists");
+  ul.replaceChildren();
+  if (!S.lists.length) ul.append(h("li", { class: "empty-side" }, "还没有列表。点「新建列表」开始。"));
+  for (const l of S.lists) {
+    const isNew = !l.id, renamed = l.id && S.base.get(l.key).name !== l.name;
+    const li = h("li", {
+      class: "litem" + (S.view === l.key ? " on" : "") + (l.deleted ? " doomed" : ""),
+      dataset: { key: l.key }, style: `--c:${colorOf(l)}`,
+    },
+      h("button", { class: "lbtn", dataset: { act: "view", key: l.key }, title: l.description || l.name },
+        star(colorOf(l)),
+        h("span", { class: "lname" }, l.name),
+        isNew && !l.deleted ? h("span", { class: "badge" }, "新建") : null,
+        renamed && !l.deleted ? h("span", { class: "badge", title: "原名：" + S.base.get(l.key).name }, "改名") : null,
+        l.deleted ? h("span", { class: "badge del" }, "将删除") : null,
+        !isNew && !l.deleted && listTouched(l) && !renamed ? h("span", { class: "flag", title: "有改动" }) : null,
+        h("span", { class: "n" }, l.items.size)),
+      l.deleted
+        ? h("button", { class: "ghost edit", dataset: { act: "undelete", key: l.key } }, "恢复")
+        : h("button", { class: "ghost edit", dataset: { act: "edit", key: l.key }, "aria-label": `编辑「${l.name}」` }, "编辑"));
+    ul.append(li);
+  }
+}
+
+function viewIds() {
+  const repos = [...S.repos.values()];
+  if (S.view === "all") return repos.filter(r => r.starred || inAny(r.id)).map(r => r.id);
+  if (S.view === "none") return unlistedIds();
+  if (S.view === "unstar") return [...S.unstar];
+  const l = viewList();
+  if (!l) return [];
+  const ids = new Set(l.items);
+  const b = S.base.get(l.key);
+  if (b && !l.deleted) b.items.forEach(id => S.repos.has(id) && ids.add(id));
+  return [...ids];
+}
+
+function filtered() {
+  const words = S.q.toLowerCase().split(/\s+/).filter(Boolean);
+  let ids = viewIds().filter(id => {
+    const r = S.repos.get(id);
+    if (S.lang && (r.language || "其他") !== S.lang) return false;
+    if (S.changedOnly && !repoDiff(id).changed) return false;
+    if (!words.length) return true;
+    const hay = (r.full_name + " " + (r.description || "")).toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
+  const R = id => S.repos.get(id);
+  const by = {
+    starred: (a, b) => (R(b).starred_at || "").localeCompare(R(a).starred_at || ""),
+    name: (a, b) => R(a).full_name.localeCompare(R(b).full_name, "en", { sensitivity: "base" }),
+    stars: (a, b) => (R(b).stars || 0) - (R(a).stars || 0),
+    pushed: (a, b) => (R(b).pushed_at || "").localeCompare(R(a).pushed_at || ""),
+  }[S.sort];
+  return ids.sort(by);
+}
+
+function renderMain() {
+  const l = viewList();
+  const title = $("#viewTitle"), desc = $("#viewDesc"), banner = $("#banner");
+  title.replaceChildren(); banner.hidden = true; banner.replaceChildren();
+  $("#btnEditList").hidden = !l || l.deleted;
+  if (S.view === "all") {
+    title.append("全部 star");
+    desc.textContent = "你 star 过的所有仓库。勾选后批量加入列表，或直接拖到左边的列表上。";
+  } else if (S.view === "none") {
+    title.append("不在任何列表");
+    desc.textContent = "这些仓库已经 star，但还没有归入任何列表。";
+  } else if (S.view === "unstar") {
+    title.append("将取消 star");
+    desc.textContent = "应用到 GitHub 时，这些仓库会先移出所有列表，最后一步才取消 star。点「保留 star」可以撤回。";
+  } else if (l) {
+    title.append(star(colorOf(l)), l.name);
+    if (l.private) title.append(h("span", { class: "tag" }, "私密"));
+    desc.textContent = l.description || "没有描述";
+    if (l.deleted) {
+      banner.hidden = false;
+      banner.append(h("span", {}, "这个列表会在应用时删除，其中的仓库仍保持 star。"),
+        h("button", { onclick: () => undelete(l.key) }, "恢复这个列表"));
+    }
+  }
+  const ids = filtered();
+  S.visible = ids;
+  for (const id of [...S.sel]) if (!ids.includes(id)) S.sel.delete(id);
+  const rows = $("#rows");
+  rows.replaceChildren();
+  if (!ids.length) {
+    rows.append(emptyState());
+  } else {
+    const frag = document.createDocumentFragment();
+    for (const id of ids) frag.append(rowEl(id, l));
+    rows.append(frag);
+  }
+  renderSelection();
+}
+
+function emptyState() {
+  let msg;
+  if (S.q || S.lang || S.changedOnly) msg = "没有符合当前筛选条件的仓库。清空搜索或筛选后再看看。";
+  else if (S.view === "none") msg = "所有 star 都已经归入列表了。";
+  else if (S.view === "unstar") msg = "没有要取消 star 的仓库。";
+  else if (S.view === "all") msg = "你还没有 star 任何仓库。";
+  else msg = "这个列表还是空的。在「全部 star」里勾选仓库后点「加入列表…」，或者直接把仓库拖到左边的这个列表上。";
+  return h("div", { class: "empty" }, star(), h("p", {}, msg));
+}
+
+function rowEl(id, l) {
+  const r = S.repos.get(id);
+  const d = repoDiff(id);
+  const gone = l && !l.deleted && !l.items.has(id);
+  const [owner, ...rest] = r.full_name.split("/");
+  const leaving = S.unstar.has(id);
+  const row = h("div", {
+    class: "row" + (d.changed ? " changed" : "") + (S.sel.has(id) ? " sel" : "") + (gone ? " gone" : "") + (leaving ? " unstarring" : ""),
+    dataset: { id }, draggable: "true",
+  },
+    h("input", { type: "checkbox", dataset: { act: "pick" }, "aria-label": "选择 " + r.full_name, checked: S.sel.has(id) }),
+    h("div", { class: "what" },
+      h("a", { class: "name", href: r.url, target: "_blank", rel: "noopener noreferrer", draggable: "false" },
+        h("span", { class: "owner" }, owner + "/"), h("span", { class: "repo" }, rest.join("/"))),
+      r.archived ? h("span", { class: "tag" }, "已归档") : null,
+      !r.starred ? h("span", { class: "tag" }, "未 star") : null,
+      leaving ? h("span", { class: "tag del" }, "将取消 star") : null,
+      r.description ? h("p", { class: "desc", title: r.description }, r.description) : null,
+      gone && !leaving ? h("p", { class: "gone-note" }, `已从「${l.name}」移出`,
+        h("button", { class: "link", dataset: { act: "restore-here" } }, "撤销")) : null,
+      leaving ? h("p", { class: "unstar-note" }, "应用时会移出所有列表并取消 star",
+        h("button", { class: "link", dataset: { act: "keep-star" } }, "保留 star")) : null),
+    h("div", { class: "meta" },
+      h("span", { class: "stars" }, "★ " + fmtNum(r.stars)),
+      r.language ? h("span", {}, r.language) : null,
+      r.pushed_at ? h("span", { title: "最近一次推送" }, "更新于 " + r.pushed_at.slice(0, 10)) : null),
+    chipsEl(id));
+  return row;
+}
+
+function chipsEl(id) {
+  const box = h("div", { class: "chips" });
+  for (const l of S.lists) {
+    const b = S.base.get(l.key);
+    const was = !!(b && b.items.has(id));
+    const now = !l.deleted && l.items.has(id);
+    const style = `--c:${colorOf(l)}`;
+    if (now) {
+      box.append(h("span", { class: "chip" + (was ? "" : " added"), style, title: was ? l.name : `新加入「${l.name}」` },
+        h("button", { class: "cn", dataset: { act: "goto", key: l.key } }, l.name),
+        h("button", { class: "x", dataset: { act: "chip-remove", key: l.key }, "aria-label": `移出「${l.name}」` }, "×")));
+    } else if (was && l.deleted) {
+      box.append(h("span", { class: "chip doomed", style, title: `「${l.name}」将被删除` }, l.name));
+    } else if (was) {
+      box.append(h("button", { class: "chip removed", style, dataset: { act: "chip-restore", key: l.key }, title: `已移出「${l.name}」，点击撤销` }, l.name));
+    }
+  }
+  box.append(h("button", { class: "chip-add", dataset: { act: "pick-lists" }, "aria-label": "加入或移出列表", title: "加入或移出列表" }, "+"));
+  return box;
+}
+
+function renderSelection() {
+  const n = S.sel.size, vis = S.visible;
+  document.querySelectorAll("#rows .row").forEach(row => {
+    const on = S.sel.has(row.dataset.id);
+    row.classList.toggle("sel", on);
+    const cb = row.querySelector("input[type=checkbox]");
+    if (cb) cb.checked = on;
+  });
+  const all = $("#selAll");
+  all.checked = n > 0 && n === vis.length;
+  all.indeterminate = n > 0 && n < vis.length;
+  all.disabled = !vis.length;
+  $("#listhead").classList.toggle("has-sel", n > 0);
+  $("#acts").hidden = n === 0;
+  const total = viewIds().length;
+  $("#countLabel").textContent = n ? `已选 ${n} 个` : (vis.length === total ? `${total} 个仓库` : `显示 ${vis.length} 个，共 ${total} 个`);
+  const l = viewList();
+  $("#bMove").hidden = !l || l.deleted;
+  $("#bRemove").hidden = !l || l.deleted;
+  if (l) $("#bRemove").textContent = `移出「${l.name}」`;
+  $("#bClear").hidden = ![...S.sel].some(inAny);
+  $("#bUnstar").hidden = ![...S.sel].some(id => S.repos.get(id).starred && !S.unstar.has(id));
+  $("#bKeep").hidden = ![...S.sel].some(id => S.unstar.has(id));
+}
+
+function fillLanguages() {
+  const counts = new Map();
+  for (const r of S.repos.values()) { const k = r.language || "其他"; counts.set(k, (counts.get(k) || 0) + 1); }
+  const sel = $("#lang");
+  sel.replaceChildren(h("option", { value: "" }, "全部语言"),
+    [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => h("option", { value: k }, `${k}（${n}）`)));
+  if (S.lang && !counts.has(S.lang)) S.lang = "";
+  sel.value = S.lang;
+}
+
+function setView(v) {
+  S.view = v; S.sel.clear(); S.anchor = null;
+  closePopover();
+  render();
+  $("#main").scrollTop = 0;
+}
+
+// ------------------------------------------------------------------ toast
+let toastTimer = null;
+function toast(msg, withUndo = true) {
+  $("#toastMsg").textContent = msg;
+  $("#toastUndo").hidden = !withUndo;
+  $("#toast").hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $("#toast").hidden = true; }, withUndo ? 5000 : 2200);
+}
+
+// ------------------------------------------------------------------ popover (list picker)
+let pop = null;
+function closePopover() {
+  if (!pop) return;
+  $("#popover").hidden = true;
+  $("#popover").replaceChildren();
+  const anchor = pop.anchor; pop = null;
+  if (anchor && document.contains(anchor)) anchor.focus({ preventScroll: true });
+}
+function openPicker(anchor, cfg) {
+  // cfg: {mode: "toggle"|"add"|"move", ids, title}
+  closePopover();
+  pop = { anchor, ...cfg };
+  const box = $("#popover");
+  const filter = h("input", { type: "search", placeholder: "查找列表", "aria-label": "查找列表" });
+  const opts = h("div", { class: "opts", role: "listbox" });
+  const fill = () => {
+    opts.replaceChildren();
+    const q = filter.value.trim().toLowerCase();
+    const lists = alive().filter(l => !(cfg.mode === "move" && l.key === S.view) && (!q || l.name.toLowerCase().includes(q)));
+    if (!lists.length) opts.append(h("p", { class: "empty-side" }, q ? "没有匹配的列表" : "还没有其他列表"));
+    for (const l of lists) {
+      const inside = cfg.ids.every(id => l.items.has(id));
+      opts.append(h("button", { class: "opt", dataset: { key: l.key }, role: "option", "aria-selected": cfg.mode === "toggle" ? String(inside) : null },
+        star(colorOf(l)), h("span", { class: "lname" }, l.name),
+        cfg.mode === "toggle" ? h("span", { class: "on" }, inside ? "✓" : "") : h("span", { class: "n" }, l.items.size)));
+    }
+  };
+  filter.addEventListener("input", fill);
+  filter.addEventListener("keydown", e => {
+    if (e.key === "Enter") { const first = opts.querySelector(".opt"); if (first) { e.preventDefault(); first.click(); } }
+    if (e.key === "ArrowDown") { const first = opts.querySelector(".opt"); if (first) { e.preventDefault(); first.focus(); } }
+  });
+  opts.addEventListener("keydown", e => {
+    const items = [...opts.querySelectorAll(".opt")], i = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); (i > 0 ? items[i - 1] : filter).focus(); }
+  });
+  opts.addEventListener("click", e => {
+    const b = e.target.closest(".opt"); if (!b) return;
+    const key = b.dataset.key, l = findList(key);
+    if (cfg.mode === "toggle") {
+      const id = cfg.ids[0];
+      if (l.items.has(id)) doRemove(key, [id]); else doAdd(key, [id]);
+      fill();
+      const again = opts.querySelector(`.opt[data-key="${CSS.escape(key)}"]`); if (again) again.focus();
+    } else if (cfg.mode === "add") {
+      closePopover(); doAdd(key, cfg.ids);
+    } else {
+      const from = S.view; closePopover(); doMove(from, key, cfg.ids); S.sel.clear(); renderSelection();
+    }
+  });
+  const create = h("button", { class: "opt", onclick: () => {
+    const c = { ...cfg }; closePopover();
+    openListDialog(null, { ids: c.ids, moveFrom: c.mode === "move" ? S.view : null });
+  } }, h("span", { class: "sign" }, "+"), "新建列表…");
+  const one = cfg.mode === "toggle" ? cfg.ids[0] : null;
+  const starBtn = one && S.repos.get(one).starred ? (S.unstar.has(one)
+    ? h("button", { class: "opt", onclick: () => { closePopover(); doKeepStar([one]); } }, h("span", { class: "sign" }, "★"), "保留 star")
+    : h("button", { class: "opt danger", onclick: () => { closePopover(); doUnstar([one]); } }, h("span", { class: "sign" }, "✕"), "取消 star…"))
+    : null;
+  box.replaceChildren(h("div", { class: "ph" }, cfg.title), filter, opts, h("div", { class: "pf" }, create, starBtn));
+  fill();
+  box.hidden = false;
+  const r = anchor.getBoundingClientRect(), W = box.offsetWidth, H = box.offsetHeight;
+  let left = Math.min(Math.max(8, r.left), window.innerWidth - W - 8);
+  let top = r.bottom + 6;
+  if (top + H > window.innerHeight - 8) top = Math.max(8, r.top - H - 6);
+  box.style.left = left + "px"; box.style.top = top + "px";
+  filter.focus();
+}
+document.addEventListener("mousedown", e => {
+  if (pop && !$("#popover").contains(e.target) && e.target !== pop.anchor) closePopover();
+});
+
+// ------------------------------------------------------------------ list dialog
+const LD = { key: null, ids: [], moveFrom: null, confirmDelete: false };
+function openListDialog(key, opts = {}) {
+  const l = key ? findList(key) : null;
+  Object.assign(LD, { key, ids: opts.ids || [], moveFrom: opts.moveFrom || null, confirmDelete: false });
+  $("#ldTitle").textContent = l ? "编辑列表" : "新建列表";
+  $("#ldSave").textContent = l ? "保存" : "创建";
+  $("#ldName").value = l ? l.name : "";
+  $("#ldDesc").value = l ? l.description : "";
+  document.querySelector(`input[name=vis][value=${l && l.private ? "private" : "public"}]`).checked = true;
+  $("#ldErr").hidden = true;
+  const del = $("#ldDelete");
+  del.hidden = !l; del.textContent = "删除列表";
+  const withWrap = $("#ldWithWrap");
+  withWrap.hidden = !!l || !LD.ids.length;
+  $("#ldWith").checked = true;
+  $("#ldWithText").textContent = LD.moveFrom
+    ? `同时把已选的 ${LD.ids.length} 个仓库移到这个列表`
+    : `同时把已选的 ${LD.ids.length} 个仓库加入这个列表`;
+  $("#listDialog").showModal();
+  $("#ldName").focus(); $("#ldName").select();
+}
+$("#listForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const name = $("#ldName").value.trim();
+  const description = $("#ldDesc").value.trim();
+  const priv = document.querySelector("input[name=vis]:checked").value === "private";
+  const err = $("#ldErr");
+  if (!name) { err.textContent = "请填写列表名称。"; err.hidden = false; $("#ldName").focus(); return; }
+  const clash = alive().find(x => x.key !== LD.key && x.name.toLowerCase() === name.toLowerCase());
+  if (clash) { err.textContent = `已经有一个叫「${clash.name}」的列表了，换个名字吧。`; err.hidden = false; $("#ldName").focus(); return; }
+  if (LD.key) {
+    const l = findList(LD.key);
+    commit(() => { l.name = name; l.description = description; l.private = priv; });
+    rememberColor(l);
+    $("#listDialog").close();
+    toast(`已保存「${name}」`);
+  } else {
+    const key = `new-${S.newSeq++}`;
+    const ids = $("#ldWith").checked ? LD.ids : [];
+    const from = LD.moveFrom;
+    const color = nextColor();
+    commit(() => {
+      S.lists.push({ key, id: null, name, description, private: priv, items: new Set(ids), deleted: false, color });
+      if (from && ids.length) removeRaw(from, ids);
+    });
+    rememberColor({ id: null, name, color });
+    $("#listDialog").close();
+    if (from && ids.length) { S.sel.clear(); renderSelection(); }
+    toast(ids.length ? `已新建「${name}」，并${from ? "移入" : "加入"} ${ids.length} 个仓库` : `已新建「${name}」`);
+  }
+});
+$("#ldCancel").addEventListener("click", () => $("#listDialog").close());
+$("#ldDelete").addEventListener("click", () => {
+  const l = findList(LD.key);
+  if (!LD.confirmDelete) {
+    LD.confirmDelete = true;
+    $("#ldDelete").textContent = `确认删除「${l.name}」？仓库仍保持 star`;
+    return;
+  }
+  $("#listDialog").close();
+  deleteList(l.key);
+});
+function deleteList(key) {
+  const l = findList(key);
+  commit(() => {
+    if (!l.id) S.lists.splice(S.lists.indexOf(l), 1);
+    else l.deleted = true;
+  });
+  if (!findList(S.view)) S.view = S.view === key ? "all" : S.view;
+  render();
+  toast(l.id ? `「${l.name}」将在应用时删除` : `已删除「${l.name}」`);
+}
+function undelete(key) {
+  const l = findList(key);
+  const clash = alive().find(x => x.name.toLowerCase() === l.name.toLowerCase());
+  if (clash) { toast(`已经有一个叫「${clash.name}」的列表，先给它改个名再恢复。`, false); return; }
+  if (commit(() => { l.deleted = false; })) toast(`已恢复「${l.name}」`);
+}
+
+// ------------------------------------------------------------------ review & apply
+function eta(n) { const s = Math.ceil(n * 1.6); return s < 90 ? `约 ${s} 秒` : `约 ${Math.round(s / 60)} 分钟`; }
+const layoutLists = () => alive().map(l => ({ id: l.id, name: l.name.trim(), description: l.description, private: l.private, items: [...l.items] }));
+
+async function openReview(restore) {
+  S.review = { restore: restore || null, plan: null };
+  $("#toast").hidden = true;
+  const dlg = $("#reviewDialog");
+  if (!dlg.open) dlg.showModal();
+  $("#rvBody").replaceChildren(h("h2", {}, restore ? "恢复备份" : "预览修改"),
+    h("p", { class: "lead" }, "正在读取 GitHub 当前状态并计算差异…"), h("div", { class: "bar indet" }, h("i")));
+  $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "取消"));
+  try {
+    const body = restore ? { restore: restore.file } : { lists: layoutLists(), unstar: [...S.unstar] };
+    const plan = await api("POST", "/api/plan", body);
+    if (!S.review) return;
+    S.review.plan = plan;
+    renderPlan(plan);
+  } catch (err) {
+    $("#rvBody").replaceChildren(h("h2", {}, "无法生成预览"), h("p", { class: "errtext" }, err.message));
+  }
+}
+
+function renderPlan(p) {
+  const restore = S.review.restore, body = $("#rvBody"), acts = $("#rvActions"), dlg = $("#reviewDialog");
+  body.replaceChildren(h("h2", {}, restore ? `恢复到 ${fmtTime(restore.fetched_at)} 的备份` : "确认要写入 GitHub 的修改"));
+  if (p.errors.length) {
+    body.append(h("div", { class: "errors" }, h("b", {}, "需要先处理这些问题，GitHub 上还没有做任何修改："),
+      h("ul", {}, p.errors.map(e => h("li", {}, e)))));
+  }
+  if (!p.errors.length && p.n_ops === 0) {
+    body.append(h("p", { class: "lead" }, restore ? "GitHub 上的列表和这个备份完全一致，不需要恢复。" : "GitHub 上已经是这个样子了，不需要修改。"));
+    acts.replaceChildren(h("span", { class: "spacer" }), h("button", { class: "primary", onclick: () => dlg.close() }, "关闭"));
+    return;
+  }
+  const parts = [];
+  if (p.creates.length) parts.push(`新建 ${p.creates.length} 个列表`);
+  if (p.updates.length) parts.push(`修改 ${p.updates.length} 个列表`);
+  if (p.deletes.length) parts.push(`删除 ${p.deletes.length} 个列表`);
+  if (p.memberships.length) parts.push(`调整 ${p.memberships.length} 个仓库的归属`);
+  if (p.restars.length) parts.push(`重新 star ${p.restars.length} 个仓库`);
+  if (p.unstars.length) parts.push(`取消 ${p.unstars.length} 个仓库的 star`);
+  if (parts.length) body.append(h("p", { class: "lead" }, parts.join("，") + `。共 ${p.n_ops} 次写入，${eta(p.n_ops)}。`));
+
+  const ops = [];
+  for (const c of p.creates) ops.push(h("li", { class: "op add" }, h("span", { class: "sign" }, "+"),
+    h("span", {}, `新建「${c.name}」${c.private ? "（私密）" : ""}${c.repos ? `，放入 ${c.repos} 个仓库` : ""}`)));
+  for (const u of p.updates) {
+    const a = u.after, b = u.before, bits = [];
+    bits.push(a.name !== b.name ? `把「${b.name}」改名为「${a.name}」` : `修改「${a.name}」`);
+    if (a.description !== b.description) bits.push(a.description ? `描述改为「${a.description}」` : "清空描述");
+    if (a.isPrivate !== b.isPrivate) bits.push(a.isPrivate ? "设为私密" : "设为公开");
+    ops.push(h("li", { class: "op edit" }, h("span", { class: "sign" }, "~"), h("span", {}, bits.join("，"))));
+  }
+  for (const d of p.deletes) ops.push(h("li", { class: "op del" }, h("span", { class: "sign" }, "−"),
+    h("span", {}, `删除「${d.name}」（现有 ${d.repos} 个仓库，仍保持 star）`)));
+  if (ops.length) body.append(h("h3", {}, "列表"), h("ul", { class: "ops" }, ops));
+
+  if (p.memberships.length) {
+    body.append(h("h3", {}, `仓库归属（${p.memberships.length}）`));
+    body.append(h("div", { class: "ptable" }, p.memberships.map(m => h("div", { class: "prow" },
+      h("span", { class: "prepo" }, m.repo),
+      h("span", { class: "pchg" },
+        m.added.map(n => h("span", { class: "pc add" }, "+ " + n)),
+        m.removed.map(n => h("span", { class: "pc del" }, "− " + n)),
+        m.kept.map(n => h("span", { class: "pc keep" }, n)),
+        (!m.added.length && !m.removed.length) ? h("span", { class: "pc keep" }, "（列表改名）") : null)))));
+  }
+  if (p.restars.length) {
+    body.append(h("h3", {}, `重新 star（${p.restars.length}，第一步执行）`),
+      h("div", { class: "ptable" }, p.restars.map(n => h("div", { class: "prow" }, h("span", { class: "prepo" }, n),
+        h("span", { class: "pchg" }, h("span", { class: "pc add" }, "+ star"))))));
+  }
+  let unstarOk = null;
+  if (p.unstars.length) {
+    body.append(h("h3", { id: "rvUnstarHead" }, `取消 star（${p.unstars.length}，最后一步执行）`),
+      h("div", { class: "ptable", id: "rvUnstar" }, p.unstars.map(n => h("div", { class: "prow" }, h("span", { class: "prepo" }, n),
+        h("span", { class: "pchg" }, h("span", { class: "pc del" }, "− star"))))));
+    unstarOk = h("input", { type: "checkbox", id: "rvUnstarOk" });
+    body.append(h("label", { class: "check confirm-unstar" }, unstarOk,
+      h("span", {}, `我确认取消这 ${p.unstars.length} 个仓库的 star。它们会从所有列表中移除；以后可以从备份恢复，但 star 时间会变成恢复当天。`)));
+  }
+  const notes = [];
+  if (p.emptied) notes.push(`之后有 ${p.emptied} 个仓库不在任何列表中，它们仍保持 star。`);
+  if (p.temp_renames) notes.push(`为了交换列表名称，${p.temp_renames} 个列表会先临时改名。`);
+  for (const w of p.warnings) notes.push(w);
+  if (notes.length) body.append(h("ul", { class: "notes" }, notes.map(n => h("li", {}, n))));
+  let delFirst = null;
+  if (!restore && p.creates.length && p.deletes.length) {
+    delFirst = h("input", { type: "checkbox" });
+    body.append(h("label", { class: "check foot" }, delFirst, "先删除旧列表，再新建（如果 GitHub 提示列表数量已达上限，勾选这里再试）"));
+  }
+  body.append(h("p", { class: "foot" }, "写入前会自动备份 GitHub 上的当前状态，之后可以在「备份」里一键恢复。"));
+  const go = h("button", { class: "primary", disabled: p.errors.length > 0 || !!unstarOk }, restore ? "恢复到这个备份" : "应用到 GitHub");
+  if (unstarOk) unstarOk.addEventListener("change", () => { go.disabled = p.errors.length > 0 || !unstarOk.checked; });
+  go.addEventListener("click", () => startApply(p, delFirst && delFirst.checked, !!(unstarOk && unstarOk.checked)));
+  acts.replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "取消"), go);
+}
+
+async function startApply(plan, deleteFirst, confirmUnstar) {
+  const restore = S.review.restore;
+  const body = restore ? { restore: restore.file, fingerprint: plan.fingerprint }
+    : { lists: layoutLists(), unstar: [...S.unstar], fingerprint: plan.fingerprint, delete_first: !!deleteFirst,
+        confirm_unstar: !!confirmUnstar };
+  try {
+    S.job = await api("POST", "/api/apply", body);
+    renderProgress(S.job);
+    startPolling();
+  } catch (err) {
+    $("#rvBody").replaceChildren(h("h2", {}, "没能开始"), h("p", { class: "errtext" }, err.message));
+    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => $("#reviewDialog").close() }, "关闭"));
+  }
+}
+
+function startPolling() {
+  clearInterval(S.poll);
+  S.poll = setInterval(async () => {
+    try {
+      const j = await api("GET", "/api/job");
+      S.job = j;
+      renderTop();
+      if ($("#reviewDialog").open) renderProgress(j);
+      if (j.status !== "running") { clearInterval(S.poll); S.poll = null; await jobEnded(j); }
+    } catch (_) { /* keep polling; the server may be busy */ }
+  }, 800);
+}
+
+function renderProgress(j) {
+  const restore = j.kind === "restore";
+  if (j.status !== "running") return;
+  const pct = j.total ? Math.round(100 * j.step / j.total) : 0;
+  const bar = h("div", { class: "bar" + (j.total ? "" : " indet") }, h("i", { style: j.total ? `width:${pct}%` : "" }));
+  $("#rvBody").replaceChildren(
+    h("h2", {}, restore ? "正在恢复备份" : "正在应用到 GitHub"),
+    h("p", { class: "lead" }, j.phase || "准备中…"),
+    bar,
+    j.total ? h("p", { class: "small muted" }, `第 ${j.step}/${j.total} 步：${j.current}`) : null,
+    h("details", {}, h("summary", {}, "详细记录"), h("pre", {}, (j.log || []).join("\n"))));
+  $("#rvActions").replaceChildren(h("span", { class: "small muted" },
+    "写入期间请不要关闭终端窗口。关掉这个页面也没关系，重新打开会继续显示进度。"));
+}
+
+async function jobEnded(j) {
+  const dlg = $("#reviewDialog");
+  const restore = j.kind === "restore";
+  if (j.status === "done") {
+    const keepName = (viewList() || {}).name;
+    try {
+      const d = await api("GET", "/api/state");
+      setBaseline(d.baseline);
+      if (keepName) { const l = S.lists.find(x => x.name === keepName); S.view = l ? l.key : "all"; }
+      render(); $("#saveState").textContent = "";
+    } catch (err) { toast("已完成，但重新读取失败：" + err.message, false); }
+    if (!dlg.open) dlg.showModal();
+    $("#rvBody").replaceChildren(
+      h("h2", {}, restore ? "已恢复" : "已应用到 GitHub"),
+      h("p", { class: "lead" }, j.total ? (restore ? "GitHub 上的列表已恢复到备份时的样子。" : "GitHub 上的列表现在和你的草稿一致。") : (j.phase || "无需修改。")),
+      j.backup ? h("p", { class: "foot" }, `修改前的备份：${j.backup}（在「备份」里可以恢复）`) : null);
+    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { class: "primary", onclick: () => dlg.close() }, "完成"));
+  } else {
+    render();
+    if (!dlg.open) dlg.showModal();
+    $("#rvBody").replaceChildren(
+      h("h2", {}, "没有全部完成"),
+      h("p", { class: "errtext" }, j.error || "出现了未知错误。"),
+      j.backup ? h("p", { class: "foot" }, `修改前的备份：${j.backup}`) : null,
+      h("details", {}, h("summary", {}, "详细记录"), h("pre", {}, (j.log || []).join("\n"))));
+    const again = h("button", { class: "primary", onclick: () => openReview(S.review && S.review.restore) }, "查看剩余修改");
+    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "关闭"), again);
+  }
+  S.job = null; renderTop();
+}
+
+// While GitHub is being written to, the progress dialog cannot be dismissed (so the draft
+// cannot be edited half-way through an apply).
+const jobRunning = () => !!(S.job && S.job.status === "running");
+$("#reviewDialog").addEventListener("cancel", e => { if (jobRunning()) e.preventDefault(); });
+$("#reviewDialog").addEventListener("close", () => {
+  if (jobRunning()) setTimeout(() => { const d = $("#reviewDialog"); if (!d.open) d.showModal(); renderProgress(S.job); }, 0);
+});
+
+// ------------------------------------------------------------------ AI suggestions
+// Claude proposes lists (the server makes the API call). The page shows what would change and
+// touches only the draft, as one undoable edit, when the user says so. Nothing here writes to GitHub.
+const AI = {
+  form: { mode: "incremental", scope: "none", allowNew: true, maxLists: 12, instructions: "", backend: null },
+  status: null, waiting: null, proposal: null, poll: null, error: "",
+};
+const scopeCount = () => [...S.repos.values()].filter(r => (r.starred || inAny(r.id)) && !S.unstar.has(r.id)).length;
+const elapsedText = s => `已用时 ${Math.round(s || 0)} 秒。可以先关掉这个窗口继续编辑，生成好后会自动弹出。`;
+
+async function openAI() {
+  closePopover();
+  $("#toast").hidden = true;
+  const dlg = $("#aiDialog");
+  if (!dlg.open) dlg.showModal();
+  if (AI.proposal) { renderAIResult(); return; }
+  $("#aiBody").replaceChildren(h("h2", {}, "AI 归类建议"), h("p", { class: "lead" }, "正在检查 AI 设置…"));
+  $("#aiActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "关闭"));
+  try {
+    const j = await api("GET", "/api/suggest");
+    if (j.ai) AI.status = j.ai;
+    if (AI.waiting && j.id === AI.waiting && j.status === "running") renderAIRunning(j);
+    else renderAIForm();
+  } catch (err) {
+    $("#aiBody").append(h("p", { class: "errtext" }, err.message));
+  }
+}
+
+const BACKEND_KEY = "sl-ai-backend";
+function rememberedBackend() { try { return localStorage.getItem(BACKEND_KEY); } catch (_) { return null; } }
+function rememberBackend(id) { try { localStorage.setItem(BACKEND_KEY, id); } catch (_) {} }
+
+function renderAIForm() {
+  const f = AI.form, dlg = $("#aiDialog");
+  const backends = (AI.status && AI.status.backends) || [];
+  if (!backends.some(b => b.id === f.backend)) {
+    const saved = rememberedBackend();
+    const pick = backends.find(b => b.id === saved && b.available) || backends.find(b => b.id === (AI.status || {}).default);
+    f.backend = pick ? pick.id : null;
+  }
+  const st = backends.find(b => b.id === f.backend) || {};
+  const nNone = unlistedIds().length, nSel = S.sel.size, nAll = scopeCount();
+  if (f.scope === "sel" && !nSel) f.scope = "none";
+  if (nSel && !AI.scopeTouched) f.scope = "sel";
+  const targets = f.mode === "reorganize" ? nAll : (f.scope === "sel" ? nSel : nNone);
+  const mode = (value, title, sub, opts) => h("div", { class: "ai-mode" + (f.mode === value ? " on" : "") },
+    h("label", { class: "radio" }, h("input", { type: "radio", name: "aimode", value, checked: f.mode === value,
+      onchange: () => { f.mode = value; renderAIForm(); } }), title),
+    h("p", { class: "sub" }, sub),
+    f.mode === value ? h("div", { class: "opts" }, opts) : null);
+  const scopeSel = h("select", { id: "aiScope", "aria-label": "要归类的仓库",
+    onchange: e => { f.scope = e.target.value; AI.scopeTouched = true; renderAIForm(); } },
+    h("option", { value: "none", selected: f.scope === "none" }, `不在任何列表的 ${nNone} 个仓库`),
+    nSel ? h("option", { value: "sel", selected: f.scope === "sel" }, `已选的 ${nSel} 个仓库`) : null);
+  const allowNew = h("input", { type: "checkbox", id: "aiAllowNew", checked: f.allowNew, onchange: e => { f.allowNew = e.target.checked; } });
+  const maxLists = h("input", { type: "number", id: "aiMax", min: "2", max: "50", value: String(f.maxLists),
+    onchange: e => { f.maxLists = Math.min(50, Math.max(2, parseInt(e.target.value, 10) || 12)); e.target.value = f.maxLists; } });
+  const instr = h("textarea", { id: "aiInstr", rows: "3", maxlength: "2000",
+    placeholder: "例如：按研究方向分；列表名用英文并带 emoji；量化金融相关的都放进 Finance",
+    oninput: e => { f.instructions = e.target.value; } });
+  instr.value = f.instructions;
+  const backendSel = h("select", { id: "aiBackend", "aria-label": "使用哪个 AI",
+    onchange: e => { f.backend = e.target.value; rememberBackend(f.backend); AI.error = ""; renderAIForm(); } },
+    backends.map(b => h("option", { value: b.id, selected: b.id === f.backend }, b.label + (b.available ? "" : "（不可用）"))));
+  const body = [
+    h("h2", {}, "AI 归类建议"),
+    h("p", { class: "lead" }, "AI 会读取仓库的名称、语言和简介，给出归类建议。你先看建议，再决定是否放进草稿；写入 GitHub 仍需「预览修改」确认。"),
+    h("div", { class: "ai-backend" }, h("label", { for: "aiBackend" }, "使用"), backendSel,
+      st.note ? h("span", { class: "small", id: "aiNote" }, st.note) : null),
+    st.warning && st.available !== false ? h("div", { class: "warn", id: "aiWarn" }, h("b", {}, "安全提示："), st.warning) : null,
+    h("fieldset", {}, h("legend", {}, "怎么归类"),
+      mode("incremental", "增量归类", "保留现有列表，只给仓库找合适的列表，不会移走已有的归类。", [
+        h("label", {}, "范围：", scopeSel),
+        h("label", { class: "check" }, allowNew, "需要时可以新建列表（最多 3 个）")]),
+      mode("reorganize", "整体重排", `重新设计全部列表，并重新分配 ${nAll} 个仓库。现有列表可能被改名、合并或删除（仓库仍保持 star）。`, [
+        h("label", {}, "列表数量上限 ", maxLists)])),
+    h("label", { class: "field" }, "额外要求（可选）", instr),
+    h("p", { class: "foot" }, `会把仓库名、语言、简介和列表名发送给 ${st.provider || "AI 服务"}（${st.label || "AI"}，模型 ${st.model || "默认"}），不会发送 GitHub token。仓库越多，等待越久。`),
+  ];
+  if (!backends.length) body.push(h("p", { class: "errtext" }, "没有可用的 AI 选项。"));
+  if (st.available === false) {
+    body.push(h("div", { class: "errors" }, h("b", {}, "AI 还不能用：" + st.reason),
+      (st.setup || []).length ? h("pre", { class: "setup" }, st.setup.join("\n")) : null));
+  }
+  if (f.mode === "incremental" && !targets) body.push(h("p", { class: "errtext" }, "所有 star 都已经归入列表了。可以先勾选一些仓库，或者改用整体重排。"));
+  if (AI.error) body.push(h("p", { class: "errtext", id: "aiError" }, AI.error));
+  const go = h("button", { class: "primary", id: "aiGo", disabled: !st.available || !targets, onclick: startAI },
+    `生成建议（${targets} 个仓库）`);
+  $("#aiBody").replaceChildren(...body);
+  $("#aiActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "取消"), go);
+}
+
+async function startAI() {
+  const f = AI.form;
+  const body = { mode: f.mode, backend: f.backend, exclude: [...S.unstar], instructions: f.instructions.trim(), max_lists: f.maxLists, allow_new: f.allowNew,
+    lists: alive().map(l => ({ key: l.key, name: l.name.trim(), description: l.description, items: [...l.items] })) };
+  if (f.mode === "incremental") body.targets = f.scope === "sel" ? [...S.sel] : unlistedIds();
+  AI.error = "";
+  $("#aiGo").disabled = true;
+  try {
+    const j = await api("POST", "/api/suggest", body);
+    AI.waiting = j.id; AI.proposal = null;
+    renderAIRunning(j); pollAI(); renderTop();
+  } catch (err) {
+    AI.error = err.message;
+    renderAIForm();
+  }
+}
+
+function renderAIRunning(j) {
+  const dlg = $("#aiDialog");
+  if (!dlg.open) return;
+  $("#aiBody").replaceChildren(h("h2", {}, `${j.label || "AI"} 正在整理…`),
+    h("p", { class: "lead" }, `${j.mode === "reorganize" ? "整体重排" : "增量归类"}：正在分析 ${j.n_repos} 个仓库。`),
+    h("div", { class: "bar indet" }, h("i")),
+    h("p", { class: "small muted", id: "aiElapsed" }, elapsedText(j.elapsed)));
+  $("#aiActions").replaceChildren(
+    h("button", { class: "ghost danger", onclick: () => { stopAIPoll(); AI.waiting = null; renderTop(); renderAIForm(); } }, "放弃这次建议"),
+    h("span", { class: "spacer" }),
+    h("button", { onclick: () => dlg.close() }, "在后台继续"));
+}
+
+function stopAIPoll() { clearInterval(AI.poll); AI.poll = null; }
+function pollAI() {
+  stopAIPoll();
+  AI.poll = setInterval(async () => {
+    let j;
+    try { j = await api("GET", "/api/suggest"); } catch (_) { return; }   // keep polling
+    if (j.id !== AI.waiting) { stopAIPoll(); return; }
+    const dlg = $("#aiDialog");
+    if (j.status === "running") {
+      const el = $("#aiElapsed");
+      if (el && dlg.open) el.textContent = elapsedText(j.elapsed);
+      return;
+    }
+    stopAIPoll(); AI.waiting = null;
+    if (j.ai) AI.status = j.ai;
+    const free = dlg.open || !document.querySelector("dialog[open]");
+    if (j.status === "done") {
+      AI.proposal = j.result;
+      AI.resultLabel = j.label || "";
+      if (free) { if (!dlg.open) dlg.showModal(); renderAIResult(); }
+      else toast("AI 建议已生成，点「查看 AI 建议」", false);
+    } else {
+      AI.error = j.error || "出现了未知错误。";
+      if (free) { if (!dlg.open) dlg.showModal(); renderAIForm(); }
+      else toast("AI 建议没有生成成功，点「AI 建议」查看原因", false);
+    }
+    renderTop();
+  }, 1000);
+}
+
+// The proposal applied to a copy of the current draft. replace = the complete new set of lists
+// (lists it does not name are deleted); otherwise it only adds repos to lists.
+function applyProposal(p) {
+  const lists = serializeLists();
+  const byKey = new Map(lists.map(l => [l.key, l]));
+  const kept = new Set();
+  const twinOf = name => lists.find(l => !l.deleted && !kept.has(l.key) && l.name.toLowerCase() === name.toLowerCase());
+  let seq = S.newSeq;
+  for (const pl of p.lists) {
+    const items = pl.items.filter(id => S.repos.has(id));
+    let l = pl.key ? byKey.get(pl.key) : null;
+    if (l && (l.deleted || kept.has(l.key))) l = null;
+    if (!l) l = twinOf(pl.name) || null;
+    if (l) {
+      kept.add(l.key);
+      if (p.replace) { l.name = pl.name; if (pl.description) l.description = pl.description; l.items = [...new Set(items)]; }
+      else l.items = [...new Set([...l.items, ...items])];
+    } else {
+      const nl = { key: `new-${seq++}`, id: null, name: pl.name, description: pl.description || "", private: false,
+                   deleted: false, color: null, items: [...new Set(items)] };
+      lists.push(nl); kept.add(nl.key);
+    }
+  }
+  let out = lists;
+  if (p.replace) {
+    out = lists.filter(l => kept.has(l.key) || l.id);      // a draft-only list the AI dropped just disappears
+    out.forEach(l => { if (!kept.has(l.key)) l.deleted = true; });
+  }
+  for (const l of out) if (l.color == null) l.color = leastUsed(out.filter(x => !x.deleted && x.color != null));
+  return { lists: out, newSeq: seq };
+}
+
+function proposalDiff(next) {
+  const cur = new Map(serializeLists().filter(l => !l.deleted).map(l => [l.key, l]));
+  const nextAlive = next.filter(l => !l.deleted);
+  const nextKeys = new Set(nextAlive.map(l => l.key));
+  const members = arr => {
+    const m = new Map();
+    for (const l of arr) for (const id of l.items) { if (!m.has(id)) m.set(id, new Set()); m.get(id).add(l.key); }
+    return m;
+  };
+  const a = members([...cur.values()]), b = members(nextAlive);
+  let moved = 0;
+  for (const id of new Set([...a.keys(), ...b.keys()])) {
+    const x = a.get(id) || new Set(), y = b.get(id) || new Set();
+    if (x.size !== y.size || [...x].some(k => !y.has(k))) moved++;
+  }
+  return {
+    cur, nextAlive, moved,
+    created: nextAlive.filter(l => !cur.has(l.key)),
+    renamed: nextAlive.filter(l => cur.has(l.key) && cur.get(l.key).name !== l.name),
+    removed: [...cur.values()].filter(l => !nextKeys.has(l.key)),
+  };
+}
+
+function renderAIResult() {
+  const p = AI.proposal, dlg = $("#aiDialog");
+  const d = proposalDiff(applyProposal(p).lists);
+  const parts = [];
+  if (d.created.length) parts.push(`新建 ${d.created.length} 个列表`);
+  if (d.renamed.length) parts.push(`改名 ${d.renamed.length} 个`);
+  if (d.removed.length) parts.push(`删除 ${d.removed.length} 个`);
+  parts.push(`调整 ${d.moved} 个仓库的归属`);
+  const show = p.replace ? d.nextAlive
+    : d.nextAlive.filter(l => !d.cur.has(l.key) || l.items.length !== d.cur.get(l.key).items.length);
+  const rows = show.map(l => {
+    const old = d.cur.get(l.key);
+    const before = new Set(old ? old.items : []), after = new Set(l.items);
+    const plus = l.items.filter(id => !before.has(id)).length;
+    const minus = old ? old.items.filter(id => !after.has(id)).length : 0;
+    return h("div", { class: "ai-row" }, star(colorOf(l)),
+      h("span", { class: "nm" }, h("span", { title: l.description || l.name }, l.name),
+        !old ? h("span", { class: "badge" }, "新建") : null,
+        old && old.name !== l.name ? h("span", { class: "badge", title: "原名：" + old.name }, "改名") : null),
+      h("span", { class: "cnt" }, `${l.items.length} 个`,
+        plus ? h("span", { class: "pc add" }, "+" + plus) : null,
+        minus ? h("span", { class: "pc del" }, "−" + minus) : null));
+  });
+  for (const l of d.removed) rows.push(h("div", { class: "ai-row doomed" }, star(colorOf(l)),
+    h("span", { class: "nm" }, h("span", {}, l.name), h("span", { class: "badge del" }, "将删除")),
+    h("span", { class: "cnt" }, `现有 ${l.items.length} 个，仍保持 star`)));
+  const u = p.usage || {};
+  const any = d.created.length || d.renamed.length || d.removed.length || d.moved;
+  $("#aiBody").replaceChildren(
+    h("h2", {}, p.replace ? "AI 建议的新列表" : "AI 建议的归类"),
+    h("p", { class: "lead", id: "aiSummary" }, parts.join("，") + "。"),
+    p.notes ? h("p", { class: "ai-notes" }, p.notes) : null,
+    h("h3", {}, p.replace ? "放入草稿后的列表" : "会有变化的列表"),
+    h("div", { class: "ai-lists" }, rows),
+    (p.warnings || []).length ? h("ul", { class: "notes" }, p.warnings.map(w => h("li", {}, w))) : null,
+    h("p", { class: "foot" }, "放入草稿后，改动会以金色标出，可以继续手动调整，也可以按 ⌘Z 一步撤销。写入 GitHub 前仍需「预览修改」确认。"),
+    h("p", { class: "foot" }, [AI.resultLabel, u.model ? `模型 ${u.model}` : "",
+      u.input_tokens != null ? `输入 ${fmtNum(u.input_tokens)} tokens` : "",
+      u.output_tokens != null ? `输出 ${fmtNum(u.output_tokens)} tokens` : ""].filter(Boolean).join(" · ")));
+  $("#aiActions").replaceChildren(
+    h("button", { class: "ghost", onclick: () => { AI.proposal = null; renderTop(); renderAIForm(); } }, "重新生成"),
+    h("span", { class: "spacer" }),
+    h("button", { onclick: () => dlg.close() }, "稍后再看"),
+    h("button", { class: "primary", id: "aiAccept", disabled: !any, onclick: acceptAI }, "放入草稿"));
+}
+
+function acceptAI() {
+  const r = applyProposal(AI.proposal);
+  const changed = commit(() => {
+    loadLists(r.lists); S.newSeq = Math.max(S.newSeq, r.newSeq);
+    alive().forEach(l => l.items.forEach(id => S.unstar.delete(id)));   // a repo in a list keeps its star
+  });
+  r.lists.filter(l => !l.id && !l.deleted).forEach(l => rememberColor(l));
+  AI.proposal = null;
+  $("#aiDialog").close();
+  render();
+  toast(changed ? "已把 AI 建议放入草稿" : "草稿已经是这个样子了", changed);
+}
+$("#btnAI").addEventListener("click", openAI);
+
+// ------------------------------------------------------------------ backups
+const KIND = { export: "导出", preapply: "应用前", prerestore: "恢复前" };
+async function openBackups() {
+  const dlg = $("#backupDialog"), list = $("#bkList");
+  const dirty = summary().total > 0;
+  $("#bkNote").hidden = !dirty;
+  list.replaceChildren(h("p", { class: "empty-side" }, "正在读取备份…"));
+  dlg.showModal();
+  try {
+    const { snapshots } = await api("GET", "/api/snapshots");
+    list.replaceChildren();
+    if (!snapshots.length) list.append(h("p", { class: "empty-side" }, "还没有备份。第一次应用修改时会自动创建。"));
+    for (const s of snapshots) {
+      list.append(h("div", { class: "snap" },
+        h("span", { class: "kind" }, KIND[s.kind] || "备份"),
+        h("span", {}, fmtTime(s.fetched_at), h("span", { class: "muted small" }, `　${s.lists} 个列表，${s.starred} 个 star`)),
+        h("button", { disabled: dirty, onclick: () => { dlg.close(); openReview(s); } }, "预览恢复")));
+    }
+  } catch (err) {
+    list.replaceChildren(h("p", { class: "errtext" }, err.message));
+  }
+}
+$("#bkClose").addEventListener("click", () => $("#backupDialog").close());
+
+// ------------------------------------------------------------------ events
+document.querySelectorAll(".vbtn").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+$("#lists").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const key = b.dataset.key;
+  if (b.dataset.act === "view") setView(key);
+  else if (b.dataset.act === "edit") openListDialog(key);
+  else if (b.dataset.act === "undelete") undelete(key);
+});
+$("#btnNewList").addEventListener("click", () => openListDialog(null, { ids: [...S.sel] }));
+$("#btnEditList").addEventListener("click", () => openListDialog(S.view));
+$("#btnUndo").addEventListener("click", undo);
+$("#btnRedo").addEventListener("click", redo);
+$("#toastUndo").addEventListener("click", () => { $("#toast").hidden = true; undo(); });
+$("#btnDiscard").addEventListener("click", () => {
+  const colors = new Map(S.lists.map(l => [l.key, l.color]));
+  const fresh = [...S.base.entries()].map(([key, b]) => ({ key, id: key, name: b.name, description: b.description, private: b.private, deleted: false, color: colors.get(key) ?? 0, items: [...b.items] }));
+  if (commit(() => { loadLists(fresh); S.unstar = new Set(); })) toast("已放弃全部修改");
+});
+$("#btnRefresh").addEventListener("click", async () => {
+  const b = $("#btnRefresh"); b.disabled = true; b.textContent = "正在读取…";
+  try { const d = await api("POST", "/api/refresh"); setBaseline(d.baseline); render(); toast("已从 GitHub 重新读取", false); }
+  catch (err) { toast("读取失败：" + err.message, false); }
+  finally { b.textContent = "重新读取"; renderTop(); }
+});
+$("#btnReview").addEventListener("click", () => {
+  if (S.job && S.job.status === "running") { $("#reviewDialog").showModal(); renderProgress(S.job); return; }
+  openReview(null);
+});
+$("#btnBackups").addEventListener("click", openBackups);
+
+$("#q").addEventListener("input", e => { S.q = e.target.value; renderMain(); });
+$("#lang").addEventListener("change", e => { S.lang = e.target.value; renderMain(); });
+$("#sort").addEventListener("change", e => { S.sort = e.target.value; renderMain(); });
+$("#changedOnly").addEventListener("change", e => { S.changedOnly = e.target.checked; renderMain(); });
+$("#selAll").addEventListener("change", e => {
+  if (e.target.checked) S.visible.forEach(id => S.sel.add(id)); else S.sel.clear();
+  renderSelection();
+});
+$("#bAdd").addEventListener("click", e => openPicker(e.currentTarget, { mode: "add", ids: [...S.sel], title: `把 ${S.sel.size} 个仓库加入…` }));
+$("#bMove").addEventListener("click", e => openPicker(e.currentTarget, { mode: "move", ids: [...S.sel], title: `把 ${S.sel.size} 个仓库移到…` }));
+$("#bRemove").addEventListener("click", () => { const ids = [...S.sel]; S.sel.clear(); doRemove(S.view, ids); });
+$("#bClear").addEventListener("click", () => { const ids = [...S.sel]; doClear(ids); });
+$("#bUnstar").addEventListener("click", () => doUnstar([...S.sel]));
+$("#bKeep").addEventListener("click", () => doKeepStar([...S.sel]));
+$("#bDeselect").addEventListener("click", () => { S.sel.clear(); renderSelection(); });
+
+function toggleSel(id, shift) {
+  const vis = S.visible;
+  if (shift && S.anchor && vis.includes(S.anchor)) {
+    const a = vis.indexOf(S.anchor), b = vis.indexOf(id);
+    const on = !S.sel.has(id);
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) on ? S.sel.add(vis[i]) : S.sel.delete(vis[i]);
+  } else {
+    S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id);
+  }
+  S.anchor = id;
+  renderSelection();
+}
+$("#rows").addEventListener("click", e => {
+  const row = e.target.closest(".row"); if (!row) return;
+  const id = row.dataset.id;
+  if (e.target.closest("a")) return;
+  const act = e.target.closest("[data-act]");
+  const name = act && act.dataset.act;
+  if (name === "pick") { toggleSel(id, e.shiftKey); return; }
+  if (name === "goto") { setView(act.dataset.key); return; }
+  if (name === "chip-remove") { doRemove(act.dataset.key, [id]); return; }
+  if (name === "chip-restore") { doAdd(act.dataset.key, [id]); return; }
+  if (name === "restore-here") { doAdd(S.view, [id]); return; }
+  if (name === "keep-star") { doKeepStar([id]); return; }
+  if (name === "pick-lists") { openPicker(act, { mode: "toggle", ids: [id], title: "放进哪些列表" }); return; }
+  if (e.target.closest("button, input, select, label")) return;
+  if (window.getSelection && String(window.getSelection())) return;   // user is selecting text
+  toggleSel(id, e.shiftKey);
+});
+
+// drag & drop: rows onto lists
+$("#rows").addEventListener("dragstart", e => {
+  const row = e.target.closest(".row"); if (!row) return;
+  const id = row.dataset.id;
+  const ids = S.sel.has(id) ? [...S.sel] : [id];
+  S.drag = { ids };
+  e.dataTransfer.effectAllowed = "copyMove";
+  e.dataTransfer.setData("text/plain", ids.map(x => S.repos.get(x).full_name).join("\n"));
+  const g = $("#ghostdrag"); g.textContent = plural(ids);
+  e.dataTransfer.setDragImage(g, 14, 14);
+  $("#dragHint").hidden = false;
+});
+$("#rows").addEventListener("dragend", () => {
+  S.drag = null; $("#dragHint").hidden = true;
+  document.querySelectorAll(".drop").forEach(x => x.classList.remove("drop"));
+});
+function dropTarget(e) {
+  const li = e.target.closest(".litem");
+  if (li && !findList(li.dataset.key).deleted) return li;
+  const v = e.target.closest(".vbtn[data-view=none]");
+  return v || null;
+}
+const side = $(".side");
+side.addEventListener("dragover", e => {
+  if (!S.drag) return;
+  const t = dropTarget(e);
+  document.querySelectorAll(".drop").forEach(x => x !== t && x.classList.remove("drop"));
+  if (!t) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = (e.altKey && viewList()) || t.classList.contains("vbtn") ? "move" : "copy";
+  t.classList.add("drop");
+});
+side.addEventListener("drop", e => {
+  if (!S.drag) return;
+  const t = dropTarget(e); if (!t) return;
+  e.preventDefault();
+  const ids = S.drag.ids;
+  t.classList.remove("drop");
+  if (t.classList.contains("vbtn")) { doClear(ids); return; }
+  const key = t.dataset.key, cur = viewList();
+  if (e.altKey && cur && !cur.deleted && cur.key !== key) { S.sel.clear(); doMove(cur.key, key, ids); }
+  else doAdd(key, ids);
+});
+
+document.addEventListener("keydown", e => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (e.key === "Escape") {
+    if (pop) { e.preventDefault(); closePopover(); return; }
+    if (!document.querySelector("dialog[open]") && S.sel.size) { S.sel.clear(); renderSelection(); }
+    return;
+  }
+  if (document.querySelector("dialog[open]")) return;
+  if (isTyping()) return;
+  if (e.key === "/" && !mod) { e.preventDefault(); $("#q").focus(); $("#q").select(); }
+  else if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if ((mod && e.key.toLowerCase() === "z" && e.shiftKey) || (e.ctrlKey && e.key.toLowerCase() === "y")) { e.preventDefault(); redo(); }
+  else if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); S.visible.forEach(id => S.sel.add(id)); renderSelection(); }
+});
+
+// ------------------------------------------------------------------ boot
+async function boot() {
+  const msg = $("#bootMsg"), retry = $("#bootRetry");
+  if (!TOKEN) {
+    msg.textContent = "请用启动时终端里显示的完整链接打开这个页面（链接末尾带有 #t=…）。";
+    document.querySelector("#boot .star").classList.remove("spin");
+    return;
+  }
+  retry.hidden = true;
+  msg.textContent = "正在从 GitHub 读取你的 star 和列表…";
+  try {
+    const d = await api("GET", "/api/state");
+    setBaseline(d.baseline);
+    if (d.draft && Array.isArray(d.draft.lists)) {
+      loadLists(d.draft.lists);
+      loadUnstar(d.draft.unstar);
+      S.newSeq = d.draft.newSeq || S.lists.length + 1;
+    }
+    $("#boot").hidden = true;
+    $("#app").hidden = false;
+    render();
+    if (d.draft && summary().total) { $("#saveState").textContent = "草稿已自动保存"; toast(`已恢复上次未应用的 ${summary().total} 处修改`, false); }
+    if (d.job && d.job.status === "running") {
+      S.job = d.job; S.review = { restore: null };
+      renderTop(); $("#reviewDialog").showModal(); renderProgress(d.job); startPolling();
+    }
+  } catch (err) {
+    msg.textContent = "读取失败：" + err.message;
+    document.querySelector("#boot .star").classList.remove("spin");
+    retry.hidden = false;
+  }
+}
+$("#bootRetry").addEventListener("click", boot);
+boot();
+})();
+</script>
+</body>
+</html>

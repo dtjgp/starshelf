@@ -1,0 +1,11 @@
+# personal data: your stars, lists, backups, drafts; local agent notes
+CLAUDE.md
+stars_backup/
+tests/fixtures/snapshot.json
+tests/.shots/
+
+# build output
+app/build/
+__pycache__/
+*.pyc
+.DS_Store
