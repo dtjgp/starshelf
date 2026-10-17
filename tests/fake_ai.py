@@ -59,6 +59,45 @@ def first_list_plus_new(prompt: ai.Prompt) -> dict[str, Any]:
             "notes": "假的增量建议。"}
 
 
+def chat_repos(prompt: ai.Prompt) -> list[tuple[str, str, list[str]]]:
+    """Chat prompt repo lines: [(ref, owner/name, [list refs])]."""
+    out = []
+    for line in prompt.user.splitlines():
+        if not re.match(r"^r\d+ \| ", line):
+            continue
+        parts = line.split(" | ")
+        inside = next((x[4:] for x in parts if x.startswith("in: ")), "none")
+        out.append((parts[0], parts[1], [] if inside == "none" else inside.split(",")))
+    return out
+
+
+def chat_answer(prompt: ai.Prompt) -> dict[str, Any]:
+    """Reacts to keywords in the newest message, like a (very literal) assistant."""
+    msg = prompt.user.rsplit("Newest message from the person:\n", 1)[1]
+    names = list_names(prompt)
+    refs = list(names)
+    repos = chat_repos(prompt)
+    blank = {"repos": [], "list": "", "to": "", "name": "", "description": ""}
+    if "?" in msg or "？" in msg:
+        return {"reply": "你是想移动哪个列表里的仓库？", "operations": []}
+    if "移到" in msg:
+        src, dst = refs[1], refs[0]
+        moving = [r for r, _, inside in repos if src in inside and dst not in inside][:2]
+        return {"reply": f"已把 2 个仓库从 {src} 移到 {dst}（{moving[0]}）。",
+                "operations": [{**blank, "op": "move", "repos": moving, "list": src, "to": dst}]}
+    if "新建" in msg:
+        loose = [r for r, _, inside in repos if not inside][:2]
+        return {"reply": "新建了 N1，放进 2 个还没归类的仓库。",
+                "operations": [{**blank, "op": "create_list", "list": "N1", "name": "Chat Bucket", "description": "made in chat"},
+                               {**blank, "op": "add", "repos": loose, "list": "N1"}]}
+    if "取消" in msg:
+        first = next(r for r, _, inside in repos if refs[0] in inside)
+        return {"reply": "已标记取消 star。", "operations": [{**blank, "op": "unstar", "repos": [first]}]}
+    if "改名" in msg:
+        return {"reply": "改好了。", "operations": [{**blank, "op": "rename_list", "list": refs[0], "name": "Renamed via chat"}]}
+    return {"reply": "好的，我在。", "operations": []}
+
+
 class FakeSuggester:
     def __init__(self, answer: Optional[Callable[[ai.Prompt], Any]] = None, delay: float = 0.0, *,
                  id: str = "fake", label: str = "Fake AI", provider: str = "Nobody", warning: str = "") -> None:
@@ -82,5 +121,6 @@ class FakeSuggester:
         time.sleep(self.delay)
         if self.error:
             raise self.error
-        answer = self.answer or (keep_and_split if prompt.schema is ai.REORG_SCHEMA else first_list_plus_new)
+        answer = self.answer or (keep_and_split if prompt.schema is ai.REORG_SCHEMA
+                                 else chat_answer if prompt.schema is ai.CHAT_SCHEMA else first_list_plus_new)
         return answer(prompt), {"backend": self.id, "model": self.model, "input_tokens": len(prompt.user) // 4, "output_tokens": 321}

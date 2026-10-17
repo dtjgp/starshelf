@@ -410,6 +410,58 @@ with sync_playwright() as p:
     expect(page.locator("#rvBody h2")).to_have_text("已恢复", timeout=60000)
     page.locator("#rvActions button.primary").click()
     check("restore brings the stars back", g.view()["starred"] == starred_before)
+    # -- AI assistant drawer (fake AI): each answer edits the draft as one undoable step
+    muts = g.mutations
+    def count(name: str) -> int:
+        return int(page.locator("#lists .litem", has_text=name).first.locator(".n").inner_text())
+    l1, l2 = page.locator("#lists .litem .lname").all_inner_texts()[:2]
+    n1, n2 = count(l1), count(l2)
+    page.click("#btnChat")
+    expect(page.locator("#chat")).to_be_visible()
+    expect(page.locator("#chatBackend option").first).to_have_text("Claude Code", timeout=10000)
+    check("drawer opens beside the list with examples", page.locator("#chatLog .chat-empty li").count() == 4
+          and page.locator("#main").is_visible())
+    ai_msgs = page.locator("#chatLog .msg.ai:not(.pending)")
+    page.fill("#chatInput", "请把第二个列表的两个仓库移到第一个")
+    page.keyboard.press("Enter")
+    expect(ai_msgs).to_have_count(1, timeout=15000)
+    reply = ai_msgs.first.inner_text()
+    check("reply names lists instead of ids", f"「{l1}」" in reply and " L1" not in reply and "r1" not in reply, reply)
+    check("move applied to the draft", count(l1) == n1 + 2 and count(l2) == n2 - 2
+          and int(page.locator("#changeCount").inner_text()) > 0, f"{count(l1)} {count(l2)}")
+    check("applied steps listed with a draft-only note", f"移到「{l1}」" in ai_msgs.first.locator("ul.done").inner_text()
+          and "还没有写入 GitHub" in ai_msgs.first.inner_text())
+    page.screenshot(path=str(OUT / "15-ai-assistant.png"))
+    ai_msgs.first.locator(".undo-turn").click()
+    check("undo this step restores the draft", count(l1) == n1 and count(l2) == n2 and "已撤销这一步" in ai_msgs.first.inner_text())
+    page.fill("#chatInput", "新建一个列表放没归类的")
+    page.click("#chatSend")
+    expect(ai_msgs).to_have_count(2, timeout=15000)
+    check("create_list adds a new draft list", page.locator("#lists .litem", has_text="Chat Bucket").count() == 1
+          and "新建" in page.locator("#lists .litem", has_text="Chat Bucket").inner_text())
+    check("history is sent back to the AI", "Conversation so far:" in fake.calls[-1].user
+          and "（已改草稿：" in fake.calls[-1].user and "随后被撤销" in fake.calls[-1].user)
+    page.fill("#chatInput", "取消第一个仓库的 star")
+    page.keyboard.press("Enter")
+    expect(ai_msgs).to_have_count(3, timeout=15000)
+    check("unstar via chat marks the repo", page.locator("#nUnstar").inner_text() == "1")
+    page.click("#vUnstar")
+    check("unstar view says it is not on GitHub yet", "还没有写入 GitHub" in page.locator("#unstarPending").inner_text())
+    page.fill("#chatInput", "怎么移？")
+    page.keyboard.press("Enter")
+    expect(ai_msgs).to_have_count(4, timeout=15000)
+    check("a question changes nothing", ai_msgs.nth(3).locator("ul.done").count() == 0)
+    page.reload()
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+    check("drawer closed after reload", page.locator("#chat").is_hidden())
+    page.click("#btnChat")
+    check("conversation kept after reload", page.locator("#chatLog .msg").count() == 8)
+    page.click("#chatClear")
+    check("clear empties the conversation", page.locator("#chatLog .msg").count() == 0)
+    page.click("#chatClose")
+    check("close hides the drawer", page.locator("#chat").is_hidden())
+    page.click("#btnDiscard")
+    check("AI assistant never writes to GitHub", g.mutations == muts)
     check("no JS errors", not errors, "\n".join(errors[:10]))
 
     # -- screenshots: dark + narrow

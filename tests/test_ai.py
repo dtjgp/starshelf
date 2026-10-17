@@ -406,6 +406,66 @@ check("unavailable AI refuses to start with setup help", ok)
 fake.available = True
 check("nothing was written to the data folder", not any(work.iterdir()))
 
+# --------------------------------------------------------------------------- 8. AI assistant chat
+def chat_req(message: str = "hi", **kw: Any) -> ai.ChatRequest:
+    return ai.parse_chat({"lists": DRAFT, "message": message, **kw}, BASE)
+
+
+c = chat_req("  把它们移到 Tools  ", unstar=["R7", "R11", "nope"],
+             history=[{"role": "user", "text": "你好"}, {"role": "assistant", "text": "在"}, {"role": "system", "text": "x"},
+                      {"role": "user", "text": "   "}] + [{"role": "user", "text": f"m{i}"} for i in range(20)])
+check("chat: message trimmed, unstar only starred known repos", c.message == "把它们移到 Tools" and c.unstar == ["R7"], str(c.unstar))
+check("chat: history keeps user/assistant turns, newest 12", len(c.history) == ai.CHAT_HISTORY_MAX
+      and c.history[-1] == ("user", "m19") and all(r in ("user", "assistant") for r, _ in c.history))
+check("chat: empty message refused", raises(lambda: chat_req("   "), "请先输入"))
+cp = ai.build_chat_prompt(c, BASE.repos)
+check("chat prompt: lists, repos with memberships, unstar mark", "L1 | AI | machine learning | 3" in cp.user
+      and any(l.startswith("r") and "alice/repo7" in l and "in: none" in l and "MARKED TO UNSTAR" in l for l in cp.user.splitlines())
+      and any("alice/repo11" in l and "in: L3" in l for l in cp.user.splitlines()), cp.user[:800])
+check("chat prompt: conversation then newest message last", cp.user.rstrip().endswith("Newest message from the person:\n把它们移到 Tools")
+      and "person: m19" in cp.user and cp.schema is ai.CHAT_SCHEMA and cp.system is ai.CHAT_SYSTEM)
+cref = {v: k for k, v in cp.repo_refs.items()}
+B = {"repos": [], "list": "", "to": "", "name": "", "description": ""}
+res = ai.interpret_chat(c, cp, {"reply": "把 r1 从 L1 移到 N1，L9 不存在", "operations": [
+    {**B, "op": "create_list", "list": "N1", "name": "New One", "description": "d"},
+    {**B, "op": "move", "repos": [cref["R1"], "r999"], "list": "L1", "to": "N1"},
+    {**B, "op": "add", "repos": [cref["R8"]], "list": "L2"},
+    {**B, "op": "remove", "repos": [cref["R4"]], "list": "L2"},
+    {**B, "op": "rename_list", "list": "L3", "name": "Archive"},
+    {**B, "op": "delete_list", "list": "L3"},
+    {**B, "op": "unstar", "repos": [cref["R9"]]},
+    {**B, "op": "keep_star", "repos": [cref["R7"]]},
+    {**B, "op": "add", "repos": [cref["R2"]], "list": "L9"},          # unknown list -> skipped
+    {**B, "op": "move", "repos": [cref["R2"]], "list": "L1", "to": "L1"},  # same list -> skipped
+    {**B, "op": "create_list", "list": "L1", "name": "clash"},        # reuses an L id -> skipped
+    {**B, "op": "fly", "repos": []},                                   # unknown op -> skipped
+]})
+kinds = [o["op"] for o in res["operations"]]
+check("chat ops: valid ones kept in order", kinds == ["create_list", "move", "add", "remove", "rename_list", "delete_list", "unstar", "keep_star"], str(kinds))
+mv = res["operations"][1]
+check("chat ops: refs mapped to draft keys, repo ids and new-list refs", mv["list"] == "UL_ai" and mv["to"] == "new:N1"
+      and mv["repos"] == ["R1"] and res["operations"][0]["list"] == "new:N1" and res["operations"][6]["repos"] == ["R9"])
+check("chat ops: invalid steps and ids reported", any("1 个无效的仓库编号" in w for w in res["warnings"])
+      and any("4 步操作" in w for w in res["warnings"]), str(res["warnings"]))
+check("chat reply: ids become names", res["reply"] == "把 alice/repo1 从 「AI」 移到 「New One」，L9 不存在", res["reply"])
+check("chat: a question without operations is fine", ai.interpret_chat(c, cp, {"reply": "哪个列表？", "operations": []})["operations"] == [])
+check("chat: nothing at all refused", raises(lambda: ai.interpret_chat(c, cp, {"reply": "", "operations": []}), "没有给出回答"))
+
+j = app.chat_status({})
+check("chat status idle with backends", j["status"] == "idle" and j["ai"]["default"] == "fake")
+started = app.start_chat({"lists": DRAFT, "message": "请把 L2 的仓库移到 L1", "backend": "fake"})
+check("chat start returns a running job", started["status"] == "running" and started["mode"] == "chat" and started["label"] == "Fake AI")
+for _ in range(100):
+    j = app.chat_status({})
+    if j["status"] != "running":
+        break
+    time.sleep(0.05)
+ops = (j.get("result") or {}).get("operations") or []
+check("chat job finishes with operations", j["status"] == "done" and ops and ops[0]["op"] == "move"
+      and ops[0]["list"] == "UL_tools" and ops[0]["to"] == "UL_ai", json.dumps(j, ensure_ascii=False)[:500])
+check("chat start refuses an empty message", raises(lambda: app.start_chat({"lists": DRAFT, "message": ""}), "请先输入"))
+check("chat and suggest jobs are separate", app.suggest_job is not app.chat_job)
+
 # --------------------------------------------------------------------------- report
 fails = [r for r in results if not r[1]]
 for name, ok, detail in fails:

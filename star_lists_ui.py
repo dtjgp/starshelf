@@ -239,6 +239,7 @@ class App:
         self.job = Job()
         self.suggesters: list[ai.Suggester] = suggesters if suggesters is not None else ai.default_backends()
         self.suggest_job = SuggestJob()
+        self.chat_job = SuggestJob()
 
     # ---- files
     @property
@@ -370,30 +371,56 @@ class App:
             out["ai"] = self._backends()
         return out
 
+    def _pick_backend(self, body: dict[str, Any]) -> tuple[ai.Suggester, dict[str, Any]]:
+        wanted = body.get("backend") or self._backends()["default"]
+        suggester = next((s for s in self.suggesters if s.id == wanted), None)
+        if suggester is None:
+            raise ai.AIError("没有这个 AI 选项")
+        status = suggester.status()
+        if not status.get("available"):
+            raise ai.AIError("\n".join([status.get("reason", "AI 不可用")] + list(status.get("setup") or [])))
+        return suggester, status
+
     def start_suggest(self, body: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             if self.baseline is None:
                 raise sl.StarListsError("还没有读取 GitHub 状态，请刷新页面")
-            wanted = body.get("backend") or self._backends()["default"]
-            suggester = next((s for s in self.suggesters if s.id == wanted), None)
-            if suggester is None:
-                raise ai.AIError("没有这个 AI 选项")
-            status = suggester.status()
-            if not status.get("available"):
-                raise ai.AIError("\n".join([status.get("reason", "AI 不可用")] + list(status.get("setup") or [])))
+            suggester, status = self._pick_backend(body)
             req = ai.parse_request(body, self.baseline)
             baseline = self.baseline
             job = SuggestJob(self.suggest_job.id + 1, req.mode, len(req.targets), "running",
                              suggester.id, status.get("label", suggester.id))
             self.suggest_job = job
-        threading.Thread(target=self._run_suggest, args=(job, req, baseline, suggester), daemon=True,
-                         name="star-lists-suggest").start()
+        threading.Thread(target=self._run_ai, args=(job, lambda: ai.suggest(req, baseline, suggester)),
+                         daemon=True, name="star-lists-suggest").start()
         return job.to_json()
 
-    def _run_suggest(self, job: SuggestJob, req: ai.SuggestRequest, baseline: sl.State,
-                     suggester: ai.Suggester) -> None:
+    # ---- AI assistant chat: one turn at a time; the page applies the returned operations to its draft
+    def chat_status(self, _: dict[str, Any]) -> dict[str, Any]:
+        job = self.chat_job
+        out = job.to_json()
+        if job.status != "running":
+            out["ai"] = self._backends()
+        return out
+
+    def start_chat(self, body: dict[str, Any]) -> dict[str, Any]:
+        with self.lock:
+            if self.baseline is None:
+                raise sl.StarListsError("还没有读取 GitHub 状态，请刷新页面")
+            suggester, status = self._pick_backend(body)
+            req = ai.parse_chat(body, self.baseline)
+            baseline = self.baseline
+            n_repos = sum(1 for r in baseline.repos.values() if r.starred)
+            job = SuggestJob(self.chat_job.id + 1, "chat", n_repos, "running",
+                             suggester.id, status.get("label", suggester.id))
+            self.chat_job = job
+        threading.Thread(target=self._run_ai, args=(job, lambda: ai.chat(req, baseline, suggester)),
+                         daemon=True, name="star-lists-chat").start()
+        return job.to_json()
+
+    def _run_ai(self, job: SuggestJob, work: Callable[[], dict[str, Any]]) -> None:
         try:
-            result, error = ai.suggest(req, baseline, suggester), None
+            result, error = work(), None
         except sl.StarListsError as exc:
             result, error = None, str(exc)
         except Exception as exc:  # noqa: BLE001 - report anything to the page
@@ -482,6 +509,8 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
         ("GET", "/api/snapshots"): app.snapshots,
         ("GET", "/api/suggest"): app.suggest_status,
         ("POST", "/api/suggest"): app.start_suggest,
+        ("GET", "/api/chat"): app.chat_status,
+        ("POST", "/api/chat"): app.start_chat,
     }
 
     class Handler(BaseHTTPRequestHandler):
