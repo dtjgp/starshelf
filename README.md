@@ -21,8 +21,9 @@ repositories at once — in a local web page, a small macOS app, or from the com
 - **Never unstars by accident.** Only repositories you explicitly mark *Unstar* lose their star:
   they are listed separately in the preview, you must tick a confirmation box, and the star is
   removed as the very last step. A later restore stars them again (with a new star date).
-- **Optional AI suggestions.** Let an AI propose a new list layout or homes for repositories that are
-  in no list. Suggestions only change the draft. Backends: your local **Claude Code** or **Codex**
+- **Optional AI assistant and suggestions.** Chat with an AI in a side panel ("move the quant repos
+  to Finance", "split FunProjects into three lists") — each answer edits the draft as one undoable
+  step — or let it propose a whole new layout. AI only ever changes the draft. Backends: your local **Claude Code** or **Codex**
   CLI (uses that tool's own login / subscription) or the **Anthropic API** (API key).
 
 ![Preview](docs/screenshots/preview.png)
@@ -78,9 +79,17 @@ With `--yes`, a plan that removes stars also needs `--allow-unstar`.
 
 ![Unstar needs confirmation](docs/screenshots/unstar-confirm.png)
 
-## AI suggestions
+## AI assistant and suggestions
 
-Open **AI 建议** (AI suggestions) in the page and pick a backend:
+- **AI 助手** (AI assistant) opens a chat panel on the right. Tell it what to change in plain words;
+  it answers with a short reply and the changes it made to your draft, which you can undo step by
+  step. It asks back when a request is unclear.
+- **AI 建议** (AI suggestions) proposes a complete new layout, or homes for repositories in no list,
+  and shows a preview before anything enters the draft.
+
+![AI assistant](docs/screenshots/ai-assistant.png)
+
+Both use the backend you pick:
 
 | Backend | Uses | Notes |
 |---|---|---|

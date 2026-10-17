@@ -325,6 +325,38 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
 @media (prefers-color-scheme: dark) { .toast button { color: var(--gold); } }
 .ghostdrag { position: fixed; top: -200px; left: -200px; padding: 6px 11px; border-radius: 7px; background: var(--ink); color: var(--panel); font-size: 13px; }
 
+/* ---------- AI assistant drawer ---------- */
+.app.chat-open { grid-template-columns: 300px minmax(0, 1fr) 380px; }
+.chat { display: none; }
+.app.chat-open .chat { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--rule); }
+.chat-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--rule-2); }
+.chat-head h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
+.chat-head select { max-width: 150px; font-size: 12.5px; padding: 4px 6px; }
+.chat-note { padding: 8px 14px 0; font-size: 12.5px; color: var(--ink-2); }
+.chat-note:empty { display: none; }
+.chat-note .warn { margin-top: 0; padding: 7px 10px; font-size: 12px; }
+.chat-log { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 92%; padding: 8px 11px; border-radius: 10px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.me { align-self: flex-end; background: var(--sel); }
+.msg.ai { align-self: flex-start; background: var(--sunk); }
+.msg.err { color: var(--remove); }
+.msg.pending { color: var(--ink-2); }
+.msg ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; white-space: normal; }
+.msg ul.done { color: var(--ink); }
+.msg ul.skipped { color: var(--ink-2); }
+.msg .turn-foot { margin-top: 6px; display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--ink-3); white-space: normal; }
+.chat-empty { color: var(--ink-2); font-size: 13px; }
+.chat-empty ul { padding-left: 18px; margin: 6px 0 10px; }
+.chat-empty li { margin: 3px 0; }
+.chat-foot { border-top: 1px solid var(--rule-2); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.chat-foot textarea { width: 100%; resize: none; min-height: 64px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--sunk); color: var(--ink); font-size: 14px; }
+.chat-row { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-3); }
+#btnChat.on { background: var(--sunk); border-color: var(--ink-3); }
+@media (max-width: 1180px) {
+  .app.chat-open { grid-template-columns: 300px minmax(0, 1fr); }
+  .app.chat-open .chat { position: fixed; right: 0; top: 0; bottom: 0; width: min(400px, 100vw); z-index: 45; box-shadow: var(--shadow); }
+}
+
 /* ---------- narrow ---------- */
 @media (max-width: 980px) {
   .row { grid-template-columns: 24px minmax(0, 1fr); }
@@ -332,7 +364,7 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
   .row .chips { grid-column: 2; }
 }
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); }
+  .app, .app.chat-open { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); }
   .side { max-height: 34vh; border-bottom: 1px solid var(--rule); padding: 10px 12px; }
   .main { border-left: 0; }
   .view-head, .toolbar, .listhead, .row { padding-left: 16px; padding-right: 16px; }
@@ -367,6 +399,7 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
       <button id="btnBackups" class="ghost">备份</button>
       <button id="btnRefresh" class="ghost">重新读取</button>
       <button id="btnDiscard" class="ghost danger">放弃修改</button>
+      <button id="btnChat" title="和 AI 对话，随时调整草稿（不会直接写入 GitHub）">AI 助手</button>
       <button id="btnAI" title="让 Claude 给出归类建议（只改草稿，不会直接写入 GitHub）">AI 建议</button>
       <button id="btnReview" class="primary">预览修改<span id="changeCount" class="count">0</span></button>
     </div>
@@ -427,6 +460,23 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
     </div>
     <div id="rows" class="rows"></div>
   </main>
+
+  <aside class="chat" id="chat" aria-label="AI 助手">
+    <div class="chat-head">
+      <h2>AI 助手</h2>
+      <select id="chatBackend" aria-label="使用哪个 AI"></select>
+      <button id="chatClear" class="ghost small" title="清空这段对话">清空</button>
+      <button id="chatClose" class="ghost small" aria-label="关闭 AI 助手">×</button>
+    </div>
+    <div class="chat-note" id="chatNote"></div>
+    <div class="chat-log" id="chatLog" role="log" aria-live="polite"></div>
+    <form class="chat-foot" id="chatForm">
+      <textarea id="chatInput" rows="3" maxlength="2000" aria-label="对 AI 说的话"
+        placeholder="例如：把量化金融相关的仓库都移到 Finance"></textarea>
+      <div class="chat-row"><span>Enter 发送，Shift+Enter 换行</span><span class="spacer"></span>
+        <button type="submit" class="primary" id="chatSend">发送</button></div>
+    </form>
+  </aside>
 </div>
 
 <div id="popover" class="popover" hidden role="dialog"></div>
@@ -661,7 +711,7 @@ function commit(fn) {
   afterEdit();
   return true;
 }
-function afterEdit() { render(); scheduleSave(); }
+function afterEdit() { render(); scheduleSave(); if (CHAT.open) renderChat(); }
 function undo() {
   if (!S.undo.length) return;
   S.redo.push(snapState());
@@ -852,6 +902,10 @@ function renderMain() {
   } else if (S.view === "unstar") {
     title.append("将取消 star");
     desc.textContent = "应用到 GitHub 时，这些仓库会先移出所有列表，最后一步才取消 star。点「保留 star」可以撤回。";
+    banner.hidden = false;
+    banner.append(h("span", { id: "unstarPending" }, h("b", {}, "还没有写入 GitHub。"),
+      `这 ${S.unstar.size} 个仓库现在仍然有 star，这里只是草稿里的标记。点「预览修改」，勾选确认，再点「应用到 GitHub」，才会真正取消。`),
+      h("button", { onclick: () => openReview(null) }, "预览修改"));
   } else if (l) {
     title.append(star(colorOf(l)), l.name);
     if (l.private) title.append(h("span", { class: "tag" }, "私密"));
@@ -1593,6 +1647,220 @@ function acceptAI() {
 }
 $("#btnAI").addEventListener("click", openAI);
 
+// ------------------------------------------------------------------ AI assistant (chat drawer)
+// Each turn sends the conversation and the current draft; the AI answers with a reply and a list
+// of operations, which are applied to the draft as one undoable edit. Nothing here writes to GitHub.
+const CHAT_KEY = "sl-chat";
+const CHAT = { open: false, turns: [], waiting: null, waitingLabel: "", poll: null };
+const CHAT_EXAMPLES = ["把量化、金融相关的仓库都移到 Finance", "FunProjects 太杂了，按主题拆成几个列表",
+  "哪些仓库还不在任何列表里？帮我归类", "把 EdgeAI 改名为「🔬 EdgeAI & Compression」"];
+const chatKeep = t => ({ role: t.role, text: t.text, ops: t.ops, warnings: t.warnings, label: t.label, undone: t.undone });
+function loadChat() {
+  try {
+    const o = JSON.parse(localStorage.getItem(CHAT_KEY) || "null");
+    CHAT.turns = o && o.fetchedAt === S.fetchedAt && Array.isArray(o.turns) ? o.turns.map(chatKeep) : [];
+  } catch (_) { CHAT.turns = []; }
+}
+function saveChat() {
+  try { localStorage.setItem(CHAT_KEY, JSON.stringify({ fetchedAt: S.fetchedAt, turns: CHAT.turns.slice(-40).map(chatKeep) })); } catch (_) {}
+}
+
+async function toggleChat(open) {
+  CHAT.open = open === undefined ? !CHAT.open : open;
+  $("#app").classList.toggle("chat-open", CHAT.open);
+  $("#btnChat").classList.toggle("on", CHAT.open);
+  if (!CHAT.open) return;
+  renderChat();
+  $("#chatInput").focus();
+  if (!AI.status) {
+    try { const j = await api("GET", "/api/suggest"); if (j.ai) AI.status = j.ai; } catch (_) {}
+    renderChat();
+  }
+}
+
+function chatBackend() {
+  const backends = (AI.status && AI.status.backends) || [];
+  if (!backends.some(b => b.id === AI.form.backend)) {
+    const saved = rememberedBackend();
+    const pick = backends.find(b => b.id === saved && b.available) || backends.find(b => b.id === (AI.status || {}).default);
+    AI.form.backend = pick ? pick.id : null;
+  }
+  return { backends, st: backends.find(b => b.id === AI.form.backend) || null };
+}
+
+function renderChat() {
+  if (!CHAT.open) return;
+  const { backends, st } = chatBackend();
+  const sel = $("#chatBackend");
+  sel.replaceChildren(...backends.map(b => h("option", { value: b.id, selected: b.id === AI.form.backend }, b.label + (b.available ? "" : "（不可用）"))));
+  sel.hidden = !backends.length;
+  const note = $("#chatNote");
+  note.replaceChildren();
+  if (!AI.status) note.append("正在检查 AI 设置…");
+  else if (!st || !st.available) note.append(h("div", { class: "warn" }, h("b", {}, "AI 还不能用："), (st && st.reason) || "没有可用的 AI 选项。",
+    st && (st.setup || []).length ? h("pre", { class: "setup" }, st.setup.join("\n")) : null));
+  else if (st.warning) note.append(h("div", { class: "warn" }, h("b", {}, "安全提示："), st.warning));
+  const log = $("#chatLog");
+  log.replaceChildren();
+  if (!CHAT.turns.length && !CHAT.waiting) {
+    log.append(h("div", { class: "chat-empty" }, "告诉 AI 你想怎么整理，例如：",
+      h("ul", {}, CHAT_EXAMPLES.map(e => h("li", {}, h("button", { class: "link", onclick: () => { $("#chatInput").value = e; $("#chatInput").focus(); } }, e)))),
+      "AI 的修改只进入草稿，每一步都可以撤销；写入 GitHub 仍需「预览修改」。"));
+  }
+  CHAT.turns.forEach((t, i) => log.append(turnEl(t, i)));
+  if (CHAT.waiting) log.append(h("div", { class: "msg ai pending", id: "chatPending" }, `${CHAT.waitingLabel || "AI"} 正在思考…`));
+  log.scrollTop = log.scrollHeight;
+  $("#chatSend").disabled = !!CHAT.waiting || !st || !st.available;
+}
+
+function turnEl(t) {
+  if (t.role === "user") return h("div", { class: "msg me" }, t.text);
+  if (t.role === "err") return h("div", { class: "msg ai err" }, t.text);
+  const canUndo = !!t.after && !t.undone && snapState() === t.after;
+  return h("div", { class: "msg ai" }, t.text,
+    (t.ops || []).length ? h("ul", { class: "done" }, t.ops.map(o => h("li", {}, o))) : null,
+    (t.warnings || []).length ? h("ul", { class: "skipped" }, t.warnings.map(w => h("li", {}, w))) : null,
+    (t.ops || []).length ? h("div", { class: "turn-foot" }, h("span", {}, t.undone ? "已撤销这一步" : "已写入草稿（还没有写入 GitHub）"),
+      t.undone ? null : h("button", { class: "link undo-turn", disabled: !canUndo,
+        title: canUndo ? "撤销 AI 这一步对草稿的修改" : "之后草稿又改过；请用顶部的「撤销」逐步撤回",
+        onclick: () => undoTurn(t) }, "撤销这一步")) : null);
+}
+
+function undoTurn(t) {
+  if (!t.after || snapState() !== t.after) return;
+  commit(() => loadState(t.before));
+  t.undone = true;
+  saveChat(); renderChat();
+  toast("已撤销 AI 助手的这一步", false);
+}
+
+async function sendChat() {
+  const input = $("#chatInput");
+  const text = input.value.trim();
+  if (!text || CHAT.waiting) return;
+  const history = CHAT.turns.filter(t => t.role !== "err").slice(-12).map(t => ({
+    role: t.role === "user" ? "user" : "assistant",
+    text: t.role === "ai" && (t.ops || []).length ? `${t.text}\n（已改草稿：${t.ops.join("；")}${t.undone ? "；随后被撤销" : ""}）` : t.text,
+  }));
+  const body = { message: text, history, backend: AI.form.backend, unstar: [...S.unstar],
+    lists: alive().map(l => ({ key: l.key, name: l.name.trim(), description: l.description, items: [...l.items] })) };
+  CHAT.turns.push({ role: "user", text });
+  input.value = "";
+  saveChat();
+  try {
+    const j = await api("POST", "/api/chat", body);
+    CHAT.waiting = j.id; CHAT.waitingLabel = j.label;
+    renderChat(); pollChat();
+  } catch (err) {
+    CHAT.turns.push({ role: "err", text: err.message });
+    saveChat(); renderChat();
+  }
+}
+
+function pollChat() {
+  clearInterval(CHAT.poll);
+  CHAT.poll = setInterval(async () => {
+    let j;
+    try { j = await api("GET", "/api/chat"); } catch (_) { return; }
+    if (j.id !== CHAT.waiting) { clearInterval(CHAT.poll); return; }
+    if (j.status === "running") {
+      const el = $("#chatPending");
+      if (el) el.textContent = `${j.label || "AI"} 正在思考…（${Math.round(j.elapsed)} 秒）`;
+      return;
+    }
+    clearInterval(CHAT.poll); CHAT.waiting = null;
+    if (j.ai) AI.status = j.ai;
+    if (j.status === "done") finishChat(j.result, j.label);
+    else { CHAT.turns.push({ role: "err", text: j.error || "出现了未知错误。" }); saveChat(); renderChat(); }
+  }, 1000);
+}
+
+// Apply one answer's operations to the draft (runs inside commit()); returns what was done.
+function applyChatOps(ops) {
+  const done = [], skipped = [], made = {};
+  const nameOf = id => (S.repos.get(id) || {}).full_name || id;
+  const few = ids => ids.length <= 3 ? ids.map(nameOf).join("、") : `${ids.slice(0, 2).map(nameOf).join("、")} 等 ${ids.length} 个仓库`;
+  const target = ref => {
+    const key = ref && ref.startsWith("new:") ? made[ref] : ref;
+    const l = key ? findList(key) : null;
+    return l && !l.deleted ? l : null;
+  };
+  const clash = (name, except) => alive().find(x => x !== except && x.name.toLowerCase() === name.toLowerCase());
+  for (const o of ops) {
+    const ids = (o.repos || []).filter(id => S.repos.has(id));
+    if (o.op === "create_list") {
+      const twin = clash(o.name);
+      if (twin) { made[o.list] = twin.key; skipped.push(`已经有「${twin.name}」，没有重复新建`); continue; }
+      const key = `new-${S.newSeq++}`;
+      S.lists.push({ key, id: null, name: o.name, description: o.description || "", private: false, items: new Set(), deleted: false, color: nextColor() });
+      made[o.list] = key;
+      done.push(`新建列表「${o.name}」`);
+      continue;
+    }
+    if (o.op === "unstar") {
+      const ok = ids.filter(id => S.repos.get(id).starred && !S.unstar.has(id));
+      if (ok.length) { clearRaw(ok); ok.forEach(id => S.unstar.add(id)); done.push(`标记取消 star：${few(ok)}`); }
+      continue;
+    }
+    if (o.op === "keep_star") {
+      const ok = ids.filter(id => S.unstar.has(id));
+      ok.forEach(id => {
+        S.unstar.delete(id);
+        for (const l of alive()) { const b = S.base.get(l.key); if (b && b.items.has(id)) l.items.add(id); }
+      });
+      if (ok.length) done.push(`保留 star：${few(ok)}`);
+      continue;
+    }
+    const l = target(o.list);
+    if (!l) { skipped.push("有一步要操作的列表已经不存在，跳过了"); continue; }
+    if (o.op === "rename_list") {
+      if (clash(o.name, l)) { skipped.push(`已经有叫「${o.name}」的列表，没有改名`); continue; }
+      const old = l.name;
+      l.name = o.name;
+      if (o.description) l.description = o.description;
+      if (old !== o.name) done.push(`把「${old}」改名为「${o.name}」`);
+    } else if (o.op === "delete_list") {
+      if (!l.id) S.lists.splice(S.lists.indexOf(l), 1); else l.deleted = true;
+      done.push(`删除列表「${l.name}」（其中的仓库仍保持 star）`);
+    } else if (o.op === "add") {
+      const n = ids.filter(id => !l.items.has(id));
+      n.forEach(id => { l.items.add(id); S.unstar.delete(id); });
+      if (n.length) done.push(`把 ${few(n)} 加入「${l.name}」`);
+    } else if (o.op === "remove") {
+      const n = ids.filter(id => l.items.has(id));
+      n.forEach(id => l.items.delete(id));
+      if (n.length) done.push(`把 ${few(n)} 移出「${l.name}」`);
+    } else if (o.op === "move") {
+      const to = target(o.to);
+      if (!to) { skipped.push("有一步要移入的列表已经不存在，跳过了"); continue; }
+      ids.forEach(id => { l.items.delete(id); to.items.add(id); S.unstar.delete(id); });
+      if (ids.length) done.push(`把 ${few(ids)} 从「${l.name}」移到「${to.name}」`);
+    }
+  }
+  return { done, skipped };
+}
+
+function finishChat(res, label) {
+  const before = snapState();
+  let out = { done: [], skipped: [] };
+  const changed = commit(() => { out = applyChatOps(res.operations || []); });
+  S.lists.filter(l => !l.id && !l.deleted).forEach(l => rememberColor(l));
+  CHAT.turns.push({ role: "ai", label, text: res.reply || (changed ? "已按你的要求修改了草稿。" : "草稿不需要修改。"),
+    ops: changed ? out.done : [], warnings: [...(res.warnings || []), ...out.skipped],
+    before: changed ? before : null, after: changed ? snapState() : null });
+  saveChat(); renderChat();
+  if (changed) toast(`AI 助手修改了草稿（${out.done.length} 处）`);
+}
+
+$("#btnChat").addEventListener("click", () => toggleChat());
+$("#chatClose").addEventListener("click", () => toggleChat(false));
+$("#chatClear").addEventListener("click", () => { CHAT.turns = []; saveChat(); renderChat(); });
+$("#chatBackend").addEventListener("change", e => { AI.form.backend = e.target.value; rememberBackend(AI.form.backend); renderChat(); });
+$("#chatForm").addEventListener("submit", e => { e.preventDefault(); sendChat(); });
+$("#chatInput").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); }
+});
+
 // ------------------------------------------------------------------ backups
 const KIND = { export: "导出", preapply: "应用前", prerestore: "恢复前" };
 async function openBackups() {
@@ -1771,6 +2039,7 @@ async function boot() {
       loadUnstar(d.draft.unstar);
       S.newSeq = d.draft.newSeq || S.lists.length + 1;
     }
+    loadChat();
     $("#boot").hidden = true;
     $("#app").hidden = false;
     render();
