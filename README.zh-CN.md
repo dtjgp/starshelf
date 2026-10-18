@@ -23,6 +23,7 @@
 - **可选的 AI 助手。** 在右侧对话面板里直接对 AI 说「把量化相关的仓库移到 Finance」
   「把 FunProjects 按主题拆成三个列表」，每次回答都作为一步可撤销的修改写进草稿。AI 只会改草稿。
   通过本机的 **Claude Code** 或 **Codex** 运行，使用它们自己的会员订阅，不需要 API key，也不会另外收费。
+- **中文或英文界面。** 顶部栏最右侧一个开关即可切换整个界面，见[界面语言](#界面语言)。
 
 ![预览修改](docs/screenshots/preview.png)
 
@@ -101,6 +102,22 @@ python3 star_lists.py restore stars_backup/snapshots/<文件>.json
 可以用 `STAR_LISTS_CLAUDE_MODEL`、`STAR_LISTS_CODEX_MODEL` 更换模型。每次调用都计入对应工具的会员用量限额；
 Starshelf 会从命令的环境变量里去掉 API key，确保使用的是会员登录。
 
+## 界面语言
+
+界面支持**简体中文**和**英文**（English）。在顶部栏最右侧（「预览修改」旁边）的开关里选择，页面会立即
+重新显示，草稿、已选的仓库和打开的面板都保持不变。
+
+- **会跟着切换的内容：** 网页上所有按钮、对话框和提示；本地服务器返回的信息（错误、应用进度、预览里的警告）；
+  AI 助手的回复和设置说明；在 macOS 小程序里还包括菜单、退出确认框和启动页面。
+- **第一次打开时**（还没有选过），语言由启动方式决定：macOS 小程序跟随系统语言，`star_lists_ui.py`
+  根据 `LANG` / `LC_ALL` 或 `--lang en|zh`。都没有时跟随浏览器语言。
+- **选择会被记住**（按浏览器保存；小程序还会存到用户默认设置 `SLLanguage`）：
+  ```bash
+  defaults write io.github.dtjgp.starshelf SLLanguage zh    # 或 en
+  ```
+- **不会翻译的内容：** 你自己的数据（仓库简介、列表名）、已经写下的对话记录、技术性的写入日志和 GitHub 返回的
+  错误原文（始终是英文），以及命令行工具（英文）。
+
 ## 隐私与安全
 
 - 网页只在 `127.0.0.1` 上提供；每个 API 请求都要带本次运行的密钥，并检查 Host 和 Origin。
@@ -117,7 +134,8 @@ pip install pyyaml playwright && python3 -m playwright install chromium
 python3 tests/test_engine.py
 python3 tests/test_lifecycle.py
 python3 tests/test_ai.py
-python3 tests/test_ui.py          # 在虚构账号上的浏览器点击测试
+python3 tests/test_ui.py          # 在虚构账号上的浏览器点击测试（中文和英文）
+python3 tests/make_screenshots.py # 重新生成 README 截图（docs/screenshots 为中文，docs/screenshots/en 为英文）
 ```
 
 ## 限制

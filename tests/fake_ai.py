@@ -5,7 +5,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import star_lists_ai as ai  # noqa: E402
@@ -55,7 +55,8 @@ def chat_answer(prompt: ai.Prompt) -> dict[str, Any]:
 
 class FakeSuggester:
     def __init__(self, answer: Optional[Callable[[ai.Prompt], Any]] = None, delay: float = 0.0, *,
-                 id: str = "fake", label: str = "Fake AI", provider: str = "Nobody", warning: str = "") -> None:
+                 id: str = "fake", label: str = "Fake AI", provider: str = "Nobody",
+                 warning: Union[str, Callable[[], str]] = "") -> None:
         self.id, self.label, self.provider, self.warning = id, label, provider, warning
         self.model = "fake-model"
         self.answer = answer
@@ -65,11 +66,14 @@ class FakeSuggester:
         self.error: Optional[Exception] = None
 
     def status(self) -> dict[str, Any]:
+        tr = ai.sl.tr  # like the real backends: messages in the language of the request
         base = {"id": self.id, "label": self.label, "provider": self.provider, "model": self.model,
-                "note": f"{self.label} 的说明", "warning": self.warning}
+                "note": tr(f"{self.label} 的说明", f"About {self.label}"),
+                "warning": self.warning() if callable(self.warning) else self.warning}
         if self.available:
             return {**base, "available": True, "reason": "", "setup": []}
-        return {**base, "available": False, "reason": f"{self.label} 还没有登录。", "setup": ["在终端运行：", "claude", "然后按提示登录。"]}
+        return {**base, "available": False, "reason": tr(f"{self.label} 还没有登录。", f"{self.label} is not signed in."),
+                "setup": tr("在终端运行：\nclaude\n然后按提示登录。", "Run this in a terminal:\nclaude\nand sign in.").split("\n")}
 
     def complete(self, prompt: ai.Prompt) -> tuple[dict[str, Any], dict[str, Any]]:
         self.calls.append(prompt)

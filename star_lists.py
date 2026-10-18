@@ -40,6 +40,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -52,6 +53,36 @@ SNAPSHOT_FORMAT = 1
 GRAPHQL_URL = "https://api.github.com/graphql"
 NEW = "new:"  # key prefix for lists that do not exist on GitHub yet
 _EMPTY_CONN: dict[str, Any] = {"nodes": [], "edges": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}
+
+
+# --------------------------------------------------------------------------- language
+# Messages a front-end shows (planner errors/warnings, UI and AI messages) come in English and
+# Simplified Chinese. The web UI sets the language per request thread (other threads use the
+# process default); the CLI stays English.
+LANGS = ("en", "zh")
+_lang = threading.local()
+_default_lang = {"value": "en"}
+
+
+def set_lang(lang: Any) -> str:
+    """Use ``lang`` ("en" | "zh", anything else -> "en") for messages made in this thread."""
+    _lang.value = lang if lang in LANGS else "en"
+    return _lang.value
+
+
+def set_default_lang(lang: Any) -> str:
+    """The language of threads that never called ``set_lang``."""
+    _default_lang["value"] = lang if lang in LANGS else "en"
+    return _default_lang["value"]
+
+
+def get_lang() -> str:
+    return getattr(_lang, "value", _default_lang["value"])
+
+
+def tr(zh: str, en: str) -> str:
+    """The Chinese or English form of a message, in this thread's language."""
+    return zh if get_lang() == "zh" else en
 
 
 # --------------------------------------------------------------------------- errors
@@ -640,7 +671,8 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
     p.starred_total = sum(1 for r in live.repos.values() if r.starred)
     p.cur_names = {lid: l.name for lid, l in live.lists.items()}
     if snap is not None and snap.login.casefold() != live.login.casefold():
-        p.errors.append(f"the snapshot belongs to @{snap.login} but you are logged in as @{live.login}")
+        p.errors.append(tr(f"这个备份属于 @{snap.login}，但当前登录的是 @{live.login}",
+                           f"the snapshot belongs to @{snap.login} but you are logged in as @{live.login}"))
         return p
 
     specs = [ListSpec(**asdict(s)) for s in layout.lists]
@@ -655,8 +687,9 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
         elif recreate_missing:
             s.id = None
         else:
-            p.errors.append(f'list "{s.name}": id {s.id} no longer exists on GitHub '
-                            f"(deleted?). Remove its `id:` line to create it again.")
+            p.errors.append(tr(f"列表「{s.name}」：GitHub 上已经没有 id {s.id}（被删除了？）。删掉它的 `id:` 行即可重新新建。",
+                               f'list "{s.name}": id {s.id} no longer exists on GitHub '
+                               f"(deleted?). Remove its `id:` line to create it again."))
     by_name: dict[str, list[str]] = {}
     for lst in live.lists.values():
         by_name.setdefault(lst.name.casefold(), []).append(lst.id)
@@ -676,9 +709,11 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
     unmanaged = [lid for lid in live.lists if lid not in known_lists and lid not in claimed]
     p.untouched = [live.lists[lid].name for lid in unmanaged]
     if unmanaged:
-        p.warnings.append(f"{len(unmanaged)} list(s) were created after the export and are not in the "
-                          f"layout; they are left untouched: {', '.join(_q(n) for n in p.untouched)} "
-                          f"(use --strict to manage them too)")
+        p.warnings.append(tr(f"有 {len(unmanaged)} 个列表是在读取之后才在 GitHub 上新建的，这次不会改动它们："
+                             f"{'、'.join(f'「{n}」' for n in p.untouched)}",
+                             f"{len(unmanaged)} list(s) were created after the export and are not in the "
+                             f"layout; they are left untouched: {', '.join(_q(n) for n in p.untouched)} "
+                             f"(use --strict to manage them too)"))
 
     final: dict[str, str] = {spec_key[i]: s.name for i, s in enumerate(specs) if i in spec_key}
     final.update({lid: live.lists[lid].name for lid in unmanaged})
@@ -686,7 +721,8 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
     owner_of: dict[str, str] = {}
     for key, name in final.items():
         if name.casefold() in owner_of:
-            p.errors.append(f'two lists would both be named "{name}" (one of them is not in the layout)')
+            p.errors.append(tr(f"会有两个列表都叫「{name}」（其中一个不在这次的修改范围内）",
+                               f'two lists would both be named "{name}" (one of them is not in the layout)'))
         owner_of[name.casefold()] = key
 
     # ---- list edits; holders of a name another list wants are moved to a temp name first
@@ -722,14 +758,17 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
             return live_ids[cf]
         rid = snap_ids.get(cf)
         if rid and rid in live.repos:
-            p.warnings.append(f"{name} is now called {live.repos[rid].full_name} on GitHub (renamed/transferred)")
+            p.warnings.append(tr(f"{name} 在 GitHub 上现在叫 {live.repos[rid].full_name}（改名或转移了）",
+                                 f"{name} is now called {live.repos[rid].full_name} on GitHub (renamed/transferred)"))
             return rid
         if rid in restar_ids:
             return rid
         if rid:
-            p.warnings.append(f"skipped {name}: it is no longer starred (star it again to put it in a list)")
+            p.warnings.append(tr(f"跳过了 {name}：它已经没有 star（重新 star 后才能放进列表）",
+                                 f"skipped {name}: it is no longer starred (star it again to put it in a list)"))
             return None
-        p.errors.append(f"unknown repository {name!r} - typo, or not starred? (star it on GitHub first)")
+        p.errors.append(tr(f"找不到仓库 {name}：名字写错了，或者还没有 star？（先在 GitHub 上 star 它）",
+                           f"unknown repository {name!r} - typo, or not starred? (star it on GitHub first)"))
         return None
 
     dropping: set[str] = set()  # repos under `unstar:` that still have a star or a list
@@ -737,7 +776,7 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
         cf = name.casefold()
         rid = live_ids.get(cf) or snap_ids.get(cf)
         if rid is None:
-            p.errors.append(f"unknown repository {name!r} under `unstar`")
+            p.errors.append(tr(f"要取消 star 的仓库 {name} 不存在", f"unknown repository {name!r} under `unstar`"))
         elif rid in live.repos:  # absent from live = already unstarred and in no list: nothing to do
             dropping.add(rid)
             if live.repos[rid].starred:
@@ -753,11 +792,13 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
             if rid:
                 mentioned.setdefault(rid, set()).add(key)
     for rid in sorted(dropping & set(mentioned)):
-        p.errors.append(f"{repo_name[rid]} is under `unstar` but also in a list - keep only one of them")
+        p.errors.append(tr(f"{repo_name[rid]} 既标记了取消 star，又还在列表里，只能保留一种",
+                           f"{repo_name[rid]} is under `unstar` but also in a list - keep only one of them"))
     parked = {rid for rid in (resolve(n) for n in layout.unlisted) if rid}
     both = sorted(live.repos[r].full_name for r in parked if r in mentioned)
     if both:
-        p.warnings.append(f"{len(both)} repo(s) are under `unlisted` and also in a list - the list wins: "
+        p.warnings.append(tr(f"有 {len(both)} 个仓库既在 `unlisted` 下又在列表里，以列表为准：",
+                             f"{len(both)} repo(s) are under `unlisted` and also in a list - the list wins: ")
                           + ", ".join(both[:5]) + (" ..." if len(both) > 5 else ""))
 
     current = live.memberships()
@@ -783,8 +824,10 @@ def build_plan(layout: Layout, live: State, snap: Optional[State], *,
             silently_emptied += 1
         p.memberships.append(Membership(rid, repo_name[rid], sorted(cur), sorted(target)))
     if silently_emptied:
-        p.warnings.append(f"{silently_emptied} repo(s) are not mentioned anywhere in the layout and will be "
-                          f"removed from their lists (they stay starred). If unintended, put them back.")
+        p.warnings.append(tr(f"有 {silently_emptied} 个仓库在新布局里没有出现，会被移出原来的列表（仍保持 star）。"
+                             f"如果不是有意的，请把它们放回去。",
+                             f"{silently_emptied} repo(s) are not mentioned anywhere in the layout and will be "
+                             f"removed from their lists (they stay starred). If unintended, put them back."))
     return p
 
 

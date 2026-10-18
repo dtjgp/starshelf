@@ -21,14 +21,15 @@ def check(name, cond, detail=""):
     print(("PASS  " if cond else "FAIL  ") + name + ("" if cond else f"\n      {detail}"), flush=True)
 
 
-def start(workdir: Path, *extra: str) -> tuple[subprocess.Popen, str]:
-    p = subprocess.Popen([sys.executable, "-u", UI, "--no-browser", "--dir", str(workdir), "--port", "19100", *extra],
+def start(workdir: Path, *extra: str, lang: str = "zh") -> tuple[subprocess.Popen, str]:
+    p = subprocess.Popen([sys.executable, "-u", UI, "--no-browser", "--dir", str(workdir), "--port", "19100",
+                          "--lang", lang, *extra],
                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=ENV)
     deadline, out = time.time() + 10, ""
     while time.time() < deadline:
         line = p.stdout.readline()
         out += line
-        m = re.search(r"http://127\.0\.0\.1:\d+/#t=[\w-]+", line)
+        m = re.search(r"http://127\.0\.0\.1:\d+/#t=[\w-]+(&lang=\w+)?", line)
         if m:
             return p, m.group(0)
         if p.poll() is not None and not line:
@@ -41,6 +42,7 @@ lock = work / "ui_server.json"
 
 p1, url1 = start(work)
 check("first instance starts", url1.startswith("http://127.0.0.1:"), url1)
+check("the link carries the language hint", json.loads(lock.read_text())["url"].endswith("&lang=zh"), lock.read_text())
 check("lock file written with mode 600", lock.exists() and oct(lock.stat().st_mode & 0o777) == "0o600",
       oct(lock.stat().st_mode) if lock.exists() else "missing")
 
@@ -58,8 +60,14 @@ p3, url3 = start(work)
 check("stale lock is ignored", url3.startswith("http://127.0.0.1:") and url3 != "http://127.0.0.1:1/#t=x", url3)
 p3.send_signal(signal.SIGTERM); p3.communicate(timeout=10)
 
+p4, url4 = start(work, lang="en")
+p4.send_signal(signal.SIGTERM)
+rest = p4.communicate(timeout=10)[0]
+check("--lang en: terminal messages in English", url4.endswith("&lang=en") and "Stopped." in rest
+      and "已关闭" not in rest, f"{url4} {rest!r}")
+
 # --exit-with-parent: launch through a shell that exits right away
-script = (f"{sys.executable} -u {UI} --no-browser --exit-with-parent --dir {work} --port 19100 "
+script = (f"{sys.executable} -u {UI} --no-browser --exit-with-parent --dir {work} --port 19100 --lang zh "
           f"> {work}/child.log 2>&1 & echo $! ; sleep 1")
 child_pid = int(subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=ENV).stdout.split()[0])
 alive = True
