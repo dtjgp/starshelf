@@ -91,6 +91,8 @@ check("chat ops: refs mapped to draft keys, repo ids and new-list refs", mv["lis
 check("chat ops: invalid steps and ids reported", any("1 个无效的仓库编号" in w for w in res["warnings"])
       and any("4 步操作" in w for w in res["warnings"]), str(res["warnings"]))
 check("chat reply: ids become names", res["reply"] == "把 alice/repo1 从 「AI」 移到 「New One」，L9 不存在", res["reply"])
+md = ai.interpret_chat(c, cp, {"reply": "已移动  **2 个**：\n- r1 到 L1\n\n\n\n- 完成   了", "operations": []})["reply"]
+check("chat reply keeps line breaks (Markdown) and maps ids", md == "已移动 **2 个**：\n- alice/repo1 到 「AI」\n\n- 完成 了", repr(md))
 check("chat: a question without operations is fine", ai.interpret_chat(c, cp, {"reply": "哪个列表？", "operations": []})["operations"] == [])
 check("chat: nothing at all refused", raises(lambda: ai.interpret_chat(c, cp, {"reply": "", "operations": []}), "没有给出回答"))
 
