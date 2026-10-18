@@ -27,7 +27,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>在本机运行。数据只在你的 Mac 和 GitHub 之间传输；使用 AI 建议时，仓库信息会发给你选的 AI 服务。</string>
+	<string>在本机运行。数据只在你的 Mac 和 GitHub 之间传输；使用 AI 助手时，仓库信息会发给你选的 AI 服务。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
