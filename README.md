@@ -63,7 +63,9 @@ The app is a small window around the same local page. It keeps its data in
 defaults write io.github.dtjgp.starshelf SLDataDir "~/path/to/folder"
 ```
 
-The build is ad-hoc signed for your own Mac. A copy downloaded from elsewhere would be blocked
+On macOS 26 and later the icon follows **System Settings → Appearance → Icon & widget style**
+(Default, Dark, Clear, Tinted) when the app is built with Xcode 26 or later; older macOS shows the
+classic icon. The build is ad-hoc signed for your own Mac. A copy downloaded from elsewhere would be blocked
 by Gatekeeper, so build it yourself.
 
 ### Command line
