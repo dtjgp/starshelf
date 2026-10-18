@@ -58,7 +58,8 @@ cd app && ./build_app.sh --install    # 需要 Xcode Command Line Tools；安装
 defaults write io.github.dtjgp.starshelf SLDataDir "~/path/to/folder"
 ```
 
-构建出的 App 是 ad-hoc 签名，只适合在你自己的 Mac 上用。从别处下载的副本会被 Gatekeeper 拦下，
+在 macOS 26 及以后的系统上，如果用 Xcode 26 或更新版本构建，图标会跟随「系统设置 → 外观 → 图标和小组件样式」
+（默认、深色、透明、着色）自动变化；更早的 macOS 显示经典图标。构建出的 App 是 ad-hoc 签名，只适合在你自己的 Mac 上用。从别处下载的副本会被 Gatekeeper 拦下，
 请自己构建。
 
 ### 命令行

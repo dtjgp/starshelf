@@ -1,7 +1,13 @@
 """Draw the Starshelf app icon: stars standing on shelves, i.e. starred repos sorted into lists.
 
-    python3 make_icon.py            # writes AppIcon.icns next to this script (macOS: uses iconutil)
-    python3 make_icon.py --preview DIR   # also saves every size as PNG for checking
+    python3 make_icon.py            # writes AppIcon.icns and AppIcon.icon next to this script
+    python3 make_icon.py --preview DIR   # also saves every size / appearance as PNG for checking
+
+Two outputs:
+  * AppIcon.icns - classic icon for macOS 14/15 (Pillow drawings below, packed with iconutil).
+  * AppIcon.icon - layered Icon Composer document for macOS 26+: vector layers (gold star, shelf
+    stars, shelves) on a slate fill with a darker fill in Dark mode. The system renders the Default,
+    Dark, Clear and Tinted appearances from it; build_app.sh compiles it into Assets.car with actool.
 
 Three drawings share one look (dark slate tile, light shelves, list-coloured stars, a gold star):
   * full  (128 pt and up): two shelves; three coloured stars on top, a large gold star below
@@ -107,6 +113,84 @@ def draw(kind: str) -> Image.Image:
     return canvas.resize((1024, 1024), Image.LANCZOS)
 
 
+# --------------------------------------------------------------------------- layered icon (macOS 26+)
+ICTOOL = Path("/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool")
+APPEARANCES = ("Default", "Dark", "ClearLight", "ClearDark", "TintedLight", "TintedDark")
+
+
+def _hex(c: tuple[int, int, int]) -> str:
+    return "#%02x%02x%02x" % c
+
+
+def _srgb(c: tuple[int, int, int]) -> str:
+    return "srgb:" + ",".join(f"{v / 255:.5f}" for v in c) + ",1.00000"
+
+
+def _svg_star(cx: float, cy: float, r: float, color: tuple[int, int, int]) -> str:
+    pts = " ".join(f"{x / S:.1f},{y / S:.1f}" for x, y in star(cx, cy, r))
+    return f'<polygon points="{pts}" fill="{_hex(color)}"/>'
+
+
+def _svg(body: str) -> str:
+    return f'<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">{body}</svg>\n'
+
+
+def write_icon_document(out: Path) -> None:
+    """The full drawing as an Icon Composer document. Its canvas is the whole 1024 square (the system
+    applies the rounded shape), so the 824 px tile layout is scaled up by 1.1 around the centre."""
+    k = 1.1
+    f = lambda v: 512 + (v - 512) * k  # noqa: E731
+    shelf_h = 54 * k
+    shelves = "".join(f'<rect x="{f(190):.1f}" y="{f(y):.1f}" width="{(834 - 190) * k:.1f}" height="{shelf_h:.1f}" '
+                      f'rx="{shelf_h / 3:.1f}" fill="{_hex(SHELF)}"/>' for y in (420, 800))
+    top = "".join(_svg_star(f(x), f(420) - TIP * 96 * k - 1, 96 * k, c) for x, c in ((300, BLUE), (512, PINK), (724, GREEN)))
+    gold = _svg_star(512, f(800) - TIP * 160 * k - 1, 160 * k, GOLD)
+    if out.exists():
+        shutil.rmtree(out)
+    (out / "Assets").mkdir(parents=True)
+    for name, body in (("gold-star.svg", gold), ("shelf-stars.svg", top), ("shelves.svg", shelves)):
+        (out / "Assets" / name).write_text(_svg(body), encoding="utf-8")
+    vertical = {"start": {"x": 0.5, "y": 0}, "stop": {"x": 0.5, "y": 1}}
+    doc = {
+        "fill": {"linear-gradient": [_srgb(TOP), _srgb(BOTTOM)], "orientation": vertical},
+        "fill-specializations": [{"appearance": "dark", "value": {
+            "linear-gradient": [_srgb((30, 36, 54)), _srgb((10, 12, 20))], "orientation": vertical}}],
+        # Groups are listed front to back. In Dark mode the shelves stay light (glass translucency off,
+        # so the dark fill cannot show through); in Tinted mode stars and shelves turn near-white, so
+        # after tinting they are the brightest parts and keep their contrast.
+        "groups": [
+            {"name": "Gold star", "layers": [{"image-name": "gold-star.svg", "name": "gold-star",
+                                              "fill-specializations": [{"appearance": "tinted", "value": {"solid": _srgb((255, 255, 255))}}]}],
+             "shadow": {"kind": "layer-color", "opacity": 0.5}, "translucency": {"enabled": True, "value": 0.2}},
+            {"name": "Shelf stars", "layers": [{"image-name": "shelf-stars.svg", "name": "shelf-stars",
+                                                "fill-specializations": [{"appearance": "tinted", "value": {"solid": _srgb((236, 236, 236))}}]}],
+             "shadow": {"kind": "layer-color", "opacity": 0.5}, "translucency": {"enabled": True, "value": 0.2}},
+            {"name": "Shelves", "layers": [{"image-name": "shelves.svg", "name": "shelves",
+                                            "fill-specializations": [
+                                                {"appearance": "dark", "value": {"solid": _srgb((206, 210, 222))}},
+                                                {"appearance": "tinted", "value": {"solid": _srgb((215, 215, 215))}}]}],
+             "shadow": {"kind": "neutral", "opacity": 0.5}, "translucency": {"enabled": False, "value": 0.5}},
+        ],
+        "supported-platforms": {"squares": ["macOS"]},
+    }
+    import json
+    (out / "icon.json").write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+
+
+def render_appearances(doc: Path, out_dir: Path, sizes: tuple[int, ...] = (1024, 64, 32)) -> None:
+    """PNG previews of every appearance, rendered by Icon Composer's own ictool (if installed)."""
+    if not ICTOOL.exists():
+        print("ictool not found (needs Xcode with Icon Composer); skipped appearance previews")
+        return
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for look in APPEARANCES:
+        for px in sizes:
+            extra = ["--tint-color", "0.6", "--tint-strength", "0.8"] if look.startswith("Tinted") else []
+            subprocess.run([str(ICTOOL), str(doc), "--export-image", "--output-file", str(out_dir / f"{look}-{px}.png"),
+                            "--platform", "macOS", "--rendition", look, "--width", str(px), "--height", str(px),
+                            "--scale", "1", *extra], check=True, capture_output=True)
+
+
 def main(argv: list[str]) -> None:
     here = Path(__file__).resolve().parent
     preview = Path(argv[argv.index("--preview") + 1]) if "--preview" in argv else None
@@ -126,6 +210,11 @@ def main(argv: list[str]) -> None:
         else:  # not on macOS: Pillow derives the small sizes from the full drawing
             drawings["full"].save(out)
     print("wrote", out)
+    doc = here / "AppIcon.icon"
+    write_icon_document(doc)
+    print("wrote", doc)
+    if preview:
+        render_appearances(doc, preview / "appearances")
 
 
 if __name__ == "__main__":
