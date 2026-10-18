@@ -27,6 +27,9 @@ repositories at once — in a local web page, a small macOS app, or from the com
   "split FunProjects into three lists") — each answer edits the draft as one undoable step. AI only
   ever changes the draft. It runs through your
   local **Claude Code** or **Codex** CLI and uses that tool's own subscription — no API key, no extra bill.
+- **English or Chinese.** Switch the language in the top-right corner of the page. The choice is
+  remembered; the first time, the page follows your browser or system language. Messages from the
+  server, the AI assistant's replies and the macOS app's menus follow the same choice.
 
 ![Preview](docs/screenshots/preview.png)
 
@@ -84,16 +87,16 @@ With `--yes`, a plan that removes stars also needs `--allow-unstar`.
 
 ## AI assistant
 
-**AI 助手** (AI assistant) opens a chat panel on the right. Tell it what to change in plain words —
+**AI assistant** opens a chat panel on the right. Tell it what to change in plain words —
 from a single move to a complete new layout. It asks back when a request is unclear.
 
 - Each answer is a short note (with **bold** and bullet lists where useful) plus **change cards**:
   one row per list with `+N` / `−N` tags, new / renamed / deleted lists and the unstar marks; open a
   row to see which repositories moved, click the list name to jump to it.
 - Every answer is one step in your draft: undo it from the message or with the normal undo.
-- **新对话** (new conversation) starts a new topic: earlier messages stay visible but are no longer sent
+- **New chat** starts a new topic: earlier messages stay visible but are no longer sent
   to the AI. A note under the input says how many recent messages the AI is using.
-- After you apply to GitHub or reread it, the conversation is archived. **历史** (history) lists the last
+- After you apply to GitHub or refresh, the conversation is archived. **History** lists the last
   10 conversations with their changes, read-only; they stay in this browser only and can be cleared.
 - Drag the panel's left edge to make it wider or narrower (or focus the edge and use ← / →;
   double-click resets it). The width is remembered.

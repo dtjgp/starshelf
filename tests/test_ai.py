@@ -16,6 +16,7 @@ import star_lists_ai as ai  # noqa: E402
 import star_lists_ui as ui  # noqa: E402
 from fake_ai import FakeSuggester  # noqa: E402
 
+sl.set_lang("zh")  # sections 1-4 read the Chinese messages; section 5 covers English
 results: list[tuple[str, bool, str]] = []
 
 
@@ -66,7 +67,7 @@ check("chat prompt: lists, repos with memberships, unstar mark", "L1 | AI | mach
       and any(l.startswith("r") and "alice/repo7" in l and "in: none" in l and "MARKED TO UNSTAR" in l for l in cp.user.splitlines())
       and any("alice/repo11" in l and "in: L3" in l for l in cp.user.splitlines()), cp.user[:800])
 check("chat prompt: conversation then newest message last", cp.user.rstrip().endswith("Newest message from the person:\n把它们移到 Tools")
-      and "person: m19" in cp.user and cp.schema is ai.CHAT_SCHEMA and cp.system is ai.CHAT_SYSTEM)
+      and "person: m19" in cp.user and cp.schema is ai.CHAT_SCHEMA and cp.system == ai.chat_system("zh"))
 cref = {v: k for k, v in cp.repo_refs.items()}
 B = {"repos": [], "list": "", "to": "", "name": "", "description": ""}
 res = ai.interpret_chat(c, cp, {"reply": "把 r1 从 L1 移到 N1，L9 不存在", "operations": [
@@ -167,7 +168,7 @@ try:
     check("claude-code: no tools, no MCP, no user settings, no saved session",
           a[a.index("--tools") + 1] == "" and "--strict-mcp-config" in a and a[a.index("--setting-sources") + 1] == "project"
           and "--no-session-persistence" in a, str(a))
-    check("claude-code: our system prompt and model/effort", a[a.index("--system-prompt") + 1] == ai.CHAT_SYSTEM
+    check("claude-code: our system prompt and model/effort", a[a.index("--system-prompt") + 1] == ai.chat_system("zh")
           and a[a.index("--model") + 1] == "opus" and a[a.index("--effort") + 1] == "medium")
     check("claude-code: prompt on stdin, temp folder, API key not passed", c["stdin"] == P.user
           and "starshelf-ai-" in c["cwd"] and c["api_key"] is False, str({k: c[k] for k in ("cwd", "api_key")}))
@@ -280,6 +281,49 @@ ops = (j.get("result") or {}).get("operations") or []
 check("chat job finishes with operations", j["status"] == "done" and ops and ops[0]["op"] == "move"
       and ops[0]["list"] == "UL_tools" and ops[0]["to"] == "UL_ai", json.dumps(j, ensure_ascii=False)[:500])
 check("chat start refuses an empty message", raises(lambda: app.start_chat({"lists": DRAFT, "message": ""}), "请先输入"))
+
+# --------------------------------------------------------------------------- 5. English messages
+sl.set_lang("en")
+check("en: empty message refused in English", raises(lambda: chat_req("   "), "Type a message for the AI first."))
+check("en: system prompt asks for English replies", "in English" in ai.chat_system() and '"Preview changes"' in ai.chat_system()
+      and "Chinese" not in ai.chat_system() and "in Simplified Chinese" in ai.chat_system("zh"))
+c = chat_req("move them")
+cp = ai.build_chat_prompt(c, BASE.repos)
+res = ai.interpret_chat(c, cp, {"reply": "Moved r1 to L1", "operations": [
+    {"op": "add", "repos": ["r999"], "list": "L1", "to": "", "name": "", "description": ""},
+    {"op": "bogus", "repos": [], "list": "", "to": "", "name": "", "description": ""}]})
+check("en: reply quotes list names with curly quotes", res["reply"] == "Moved alice/repo1 to “AI”", res["reply"])
+check("en: warnings in English", res["warnings"] == ["The AI's answer had 1 invalid repository id(s); they were ignored.",
+                                                     "2 incomplete or invalid step(s) were skipped."], str(res["warnings"]))
+os.environ["STAR_LISTS_CLAUDE_BIN"] = str(Path(tempfile.mkdtemp()) / "missing")
+try:
+    cc = ai.ClaudeCodeSuggester()
+    st_en = cc.status()
+    sl.set_lang("zh")
+    st_zh = cc.status()
+    sl.set_lang("en")
+    check("status is cached per language", "was not found" in st_en["reason"] and "Install it" in st_en["setup"][0]
+          and "没有找到" in st_zh["reason"] and cc.status() is st_en, f"{st_en} {st_zh}")
+finally:
+    os.environ.pop("STAR_LISTS_CLAUDE_BIN", None)
+check("Codex warning has an English form", "read files on your computer" in ai.CODEX_WARNING_EN)
+bad_ids = FakeSuggester(lambda p: {"reply": "", "operations": [
+    {"op": "add", "repos": ["r999", "r1"], "list": "L1", "to": "", "name": "", "description": ""}]})
+app_en = ui.App(None, work, suggesters=[bad_ids])
+app_en.baseline = BASE
+app_en.start_chat({"lists": DRAFT, "message": "add it"})
+sl.set_lang("zh")  # the job keeps the language it was started with
+for _ in range(100):
+    j = app_en.chat_status({})
+    if j["status"] != "running":
+        break
+    time.sleep(0.05)
+check("a chat job runs in the language of the request that started it", j["status"] == "done"
+      and "in English" in bad_ids.calls[-1].system
+      and j["result"]["warnings"] == ["The AI's answer had 1 invalid repository id(s); they were ignored."], str(j)[:400])
+check("default language from the locale", ui.default_lang({"LANG": "zh_CN.UTF-8"}) == "zh"
+      and ui.default_lang({"LANG": "en_US.UTF-8"}) == "en" and ui.default_lang({}) == "en"
+      and ui.default_lang({"LC_ALL": "zh_TW.UTF-8", "LANG": "en_US.UTF-8"}) == "zh")
 
 # --------------------------------------------------------------------------- report
 fails = [r for r in results if not r[1]]

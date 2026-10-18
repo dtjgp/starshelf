@@ -4,8 +4,9 @@
     python3 star_lists_ui.py          # opens http://127.0.0.1:8765 in your browser
 
 Everything you change in the page is a local draft (saved automatically) until you
-press "应用到 GitHub". Each apply takes a backup first, and any backup can be restored
-from the "备份" dialog. The work itself is done by star_lists.py (same folder), so the
+press "Apply to GitHub" (「应用到 GitHub」). Each apply takes a backup first, and any backup can be
+restored from the "Backups" (「备份」) dialog. The page is in English or Simplified Chinese; it
+sends its language with every API call (header X-Lang) and the messages here follow it. The work itself is done by star_lists.py (same folder), so the
 page and the command line behave identically.
 
 Security: the server listens on 127.0.0.1 only, checks the Host/Origin headers and
@@ -52,6 +53,17 @@ class Busy(sl.StarListsError):
     """Another apply/restore is still running."""
 
 
+def NOT_LOADED() -> str:  # noqa: N802 - a message, like a constant
+    return sl.tr("还没有读取 GitHub 状态，请刷新页面", "The GitHub state has not been read yet; reload the page.")
+
+
+def default_lang(env: Optional[dict[str, str]] = None) -> str:
+    """Chinese if the locale (LC_ALL / LC_MESSAGES / LANG) is Chinese, else English."""
+    env = os.environ if env is None else env
+    loc = env.get("LC_ALL") or env.get("LC_MESSAGES") or env.get("LANG") or ""
+    return "zh" if loc.lower().startswith("zh") else "en"
+
+
 # --------------------------------------------------------------------------- payloads
 def state_payload(state: sl.State) -> dict[str, Any]:
     """Everything the page needs to render, without any credentials."""
@@ -71,9 +83,9 @@ def state_payload(state: sl.State) -> dict[str, Any]:
 def layout_from_draft(draft_lists: Any, baseline: sl.State, unstar: Any = None) -> sl.Layout:
     """Turn the page's draft (lists with repo ids, repo ids to unstar) into a star_lists Layout."""
     if not isinstance(draft_lists, list):
-        raise sl.StarListsError("草稿格式不正确（缺少 lists）")
+        raise sl.StarListsError(sl.tr("草稿格式不正确（缺少 lists）", "Malformed draft (no lists)."))
     if unstar is not None and not isinstance(unstar, list):
-        raise sl.StarListsError("草稿格式不正确（unstar）")
+        raise sl.StarListsError(sl.tr("草稿格式不正确（unstar）", "Malformed draft (unstar)."))
     names = {r.id: r.full_name for r in baseline.repos.values()}
     errors: list[str] = []
     seen: set[str] = set()
@@ -81,14 +93,15 @@ def layout_from_draft(draft_lists: Any, baseline: sl.State, unstar: Any = None) 
     listed: set[str] = set()
     for i, raw in enumerate(draft_lists, 1):
         if not isinstance(raw, dict):
-            errors.append(f"第 {i} 个列表格式不正确")
+            errors.append(sl.tr(f"第 {i} 个列表格式不正确", f"List {i} is malformed."))
             continue
         name = str(raw.get("name") or "").strip()
         if not name:
-            errors.append(f"第 {i} 个列表没有名字")
+            errors.append(sl.tr(f"第 {i} 个列表没有名字", f"List {i} has no name."))
             continue
         if name.casefold() in seen:
-            errors.append(f"有两个列表都叫「{name}」，列表名不能重复")
+            errors.append(sl.tr(f"有两个列表都叫「{name}」，列表名不能重复",
+                                f"Two lists are both called “{name}”; list names must be unique."))
         seen.add(name.casefold())
         items = [rid for rid in dict.fromkeys(raw.get("items") or []) if isinstance(rid, str) and rid in names]
         listed.update(items)
@@ -99,7 +112,8 @@ def layout_from_draft(draft_lists: Any, baseline: sl.State, unstar: Any = None) 
     dropping = [rid for rid in dict.fromkeys(unstar or []) if isinstance(rid, str) and rid in names]
     for rid in dropping:
         if rid in listed:
-            errors.append(f"{names[rid]} 还在列表里，不能同时取消 star")
+            errors.append(sl.tr(f"{names[rid]} 还在列表里，不能同时取消 star",
+                                f"{names[rid]} is still in a list, so it cannot be unstarred too."))
     if errors:
         raise sl.StarListsError("\n".join(errors))
     gone = set(dropping)
@@ -163,10 +177,13 @@ def plan_payload(plan: sl.Plan) -> dict[str, Any]:
 
 # --------------------------------------------------------------------------- background job
 class Job:
-    """Progress of one apply/restore run, shared with the polling page."""
+    """Progress of one apply/restore run, shared with the polling page.
 
-    def __init__(self, kind: str = "", status: str = "idle") -> None:
+    Its messages use the language of the request that started it (``lang``)."""
+
+    def __init__(self, kind: str = "", status: str = "idle", lang: str = "en") -> None:
         self.kind = kind
+        self.lang = lang
         self.status = status  # idle | running | done | failed
         self.phase = ""
         self.step = 0
@@ -184,9 +201,9 @@ class Job:
             match = PROGRESS.match(line)
             if match:
                 self.step, self.total, self.current = int(match[1]), int(match[2]), match[3]
-                self.phase = "正在写入 GitHub"
+                self.phase = sl.tr("正在写入 GitHub", "Writing to GitHub")
             elif line.startswith("Verifying"):
-                self.phase = "正在核对 GitHub 上的结果"
+                self.phase = sl.tr("正在核对 GitHub 上的结果", "Checking the result on GitHub")
             self.lines.append(line)
             del self.lines[:-400]
 
@@ -228,8 +245,9 @@ class AIJob:
 # --------------------------------------------------------------------------- application
 class App:
     def __init__(self, client: sl.Client, workdir: Path, *, sleep: float = 1.0, settle: float = 2.0,
-                 suggesters: Optional[list[ai.Suggester]] = None) -> None:
+                 suggesters: Optional[list[ai.Suggester]] = None, lang: str = "en") -> None:
         self.client = client
+        self.lang = lang  # for requests without an X-Lang header
         self.dir = workdir
         self.sleep = sleep
         self.settle = settle
@@ -266,15 +284,16 @@ class App:
 
     def _snapshot_path(self, name: Any) -> Path:
         if not isinstance(name, str) or not SNAPSHOT_NAME.match(name):
-            raise sl.StarListsError("备份文件名不正确")
+            raise sl.StarListsError(sl.tr("备份文件名不正确", "Invalid backup file name."))
         path = self.dir / "snapshots" / name
         if not path.is_file():
-            raise sl.StarListsError(f"找不到备份 {name}")
+            raise sl.StarListsError(sl.tr(f"找不到备份 {name}", f"Backup {name} not found."))
         return path
 
     def _ensure_idle(self) -> None:
         if self.job.status == "running":
-            raise Busy("正在写入 GitHub，请等它完成后再操作")
+            raise Busy(sl.tr("正在写入 GitHub，请等它完成后再操作",
+                             "GitHub is being written to. Wait until it finishes, then try again."))
 
     # ---- endpoints
     def get_state(self, _: dict[str, Any]) -> dict[str, Any]:
@@ -306,7 +325,7 @@ class App:
     def save_draft(self, body: dict[str, Any]) -> dict[str, Any]:
         draft = body.get("draft")
         if draft is not None and not isinstance(draft, dict):
-            raise sl.StarListsError("草稿格式不正确")
+            raise sl.StarListsError(sl.tr("草稿格式不正确", "Malformed draft."))
         with self.lock:
             self._write_draft(draft)
         return {"saved": draft is not None, "at": time.time()}
@@ -316,7 +335,7 @@ class App:
             snap = sl.State.load(self._snapshot_path(body["restore"]))
             return sl.layout_from_state(snap), snap, True, True, "restore"
         if self.baseline is None:
-            raise sl.StarListsError("还没有读取 GitHub 状态，请刷新页面")
+            raise sl.StarListsError(NOT_LOADED())
         return (layout_from_draft(body.get("lists"), self.baseline, body.get("unstar")), self.baseline,
                 False, False, "apply")
 
@@ -332,8 +351,8 @@ class App:
         with self.lock:
             self._ensure_idle()
             layout, snap, strict, recreate, kind = self._resolve(body)
-            self.job = Job(kind=kind, status="running")
-            self.job.phase = "正在读取 GitHub 当前状态"
+            self.job = Job(kind=kind, status="running", lang=sl.get_lang())
+            self.job.phase = sl.tr("正在读取 GitHub 当前状态", "Reading the current state from GitHub")
             args = (self.job, layout, snap, strict, recreate, kind, body.get("fingerprint"),
                     bool(body.get("delete_first")), body.get("confirm_unstar") is True)
             threading.Thread(target=self._run, args=args, daemon=True, name="star-lists-apply").start()
@@ -367,10 +386,11 @@ class App:
         wanted = body.get("backend") or self._backends()["default"]
         suggester = next((s for s in self.suggesters if s.id == wanted), None)
         if suggester is None:
-            raise ai.AIError("没有这个 AI 选项")
+            raise ai.AIError(sl.tr("没有这个 AI 选项", "There is no such AI option."))
         status = suggester.status()
         if not status.get("available"):
-            raise ai.AIError("\n".join([status.get("reason", "AI 不可用")] + list(status.get("setup") or [])))
+            reason = status.get("reason") or sl.tr("AI 不可用", "The AI is not available.")
+            raise ai.AIError("\n".join([reason] + list(status.get("setup") or [])))
         return suggester, status
 
     # ---- AI assistant chat: one turn at a time; the page applies the returned operations to its draft
@@ -384,7 +404,7 @@ class App:
     def start_chat(self, body: dict[str, Any]) -> dict[str, Any]:
         with self.lock:
             if self.baseline is None:
-                raise sl.StarListsError("还没有读取 GitHub 状态，请刷新页面")
+                raise sl.StarListsError(NOT_LOADED())
             suggester, status = self._pick_backend(body)
             req = ai.parse_chat(body, self.baseline)
             baseline = self.baseline
@@ -392,11 +412,12 @@ class App:
             job = AIJob(self.chat_job.id + 1, "chat", n_repos, "running",
                              suggester.id, status.get("label", suggester.id))
             self.chat_job = job
-        threading.Thread(target=self._run_ai, args=(job, lambda: ai.chat(req, baseline, suggester)),
+        threading.Thread(target=self._run_ai, args=(job, lambda: ai.chat(req, baseline, suggester), sl.get_lang()),
                          daemon=True, name="star-lists-chat").start()
         return job.to_json()
 
-    def _run_ai(self, job: AIJob, work: Callable[[], dict[str, Any]]) -> None:
+    def _run_ai(self, job: AIJob, work: Callable[[], dict[str, Any]], lang: str = "en") -> None:
+        sl.set_lang(lang)  # the AI replies, and its messages are written, in the page's language
         try:
             result, error = work(), None
         except sl.StarListsError as exc:
@@ -419,19 +440,26 @@ class App:
                 job.add(line)
 
         sl._echo = echo
+        sl.set_lang(job.lang)
         try:
             live = sl.fetch_state(self.client)
             plan = sl.build_plan(layout, live, snap, strict=strict, recreate_missing=recreate)
             if plan.errors:
                 raise sl.StarListsError("\n".join(plan.errors))
             if fingerprint and fingerprint != plan_fingerprint(plan):
-                raise sl.StarListsError("预览之后 GitHub 上的内容有变化（可能你在网页上改过）。"
-                                        "没有做任何修改，请重新预览后再应用。")
+                raise sl.StarListsError(sl.tr("预览之后 GitHub 上的内容有变化（可能你在网页上改过）。"
+                                              "没有做任何修改，请重新预览后再应用。",
+                                              "GitHub changed after the preview (did you edit it on the website?). "
+                                              "Nothing was changed. Preview again, then apply."))
             if plan.unstars and not confirm_unstar:
-                raise sl.StarListsError(f"这次会取消 {len(plan.unstars)} 个仓库的 star，需要先在预览里勾选确认。"
-                                        "没有做任何修改。")
+                raise sl.StarListsError(sl.tr(f"这次会取消 {len(plan.unstars)} 个仓库的 star，需要先在预览里勾选确认。"
+                                              "没有做任何修改。",
+                                              f"This would unstar {len(plan.unstars)} repositories; tick the "
+                                              f"confirmation in the preview first. Nothing was changed."))
             if plan.n_ops == 0:
-                job.set(status="done", phase="GitHub 已经和草稿一致，无需修改", finished=time.time())
+                job.set(status="done", phase=sl.tr("GitHub 已经和草稿一致，无需修改",
+                                                   "GitHub already matches the draft; nothing to change."),
+                        finished=time.time())
                 with self.lock:
                     self.baseline = live
                     live.save(self.baseline_path)
@@ -442,7 +470,7 @@ class App:
             label = "preapply" if kind == "apply" else "prerestore"
             backup = self.dir / "snapshots" / f"{label}-ui-{stamp}.json"
             live.save(backup)
-            job.set(backup=backup.name, total=plan.n_ops, phase="正在写入 GitHub")
+            job.set(backup=backup.name, total=plan.n_ops, phase=sl.tr("正在写入 GitHub", "Writing to GitHub"))
             journal = self.dir / "logs" / f"{kind}-ui-{stamp}.jsonl"
             code = sl.apply_with_verify(self.client, layout, snap, plan, live, strict=strict,
                                         recreate_missing=recreate, sleep=self.sleep, delete_first=delete_first,
@@ -454,17 +482,26 @@ class App:
                     fresh.save(self.baseline_path)
                     self._write_draft(None)
             if code == 0:
-                job.set(status="done", phase="完成", finished=time.time())
+                job.set(status="done", phase=sl.tr("完成", "Done"), finished=time.time())
             else:
                 job.set(status="failed", finished=time.time(),
-                        error="大部分修改已写入，但仍有少量没有生效（GitHub 可能还没更新完）。"
-                              "等一分钟后再点「再次应用」即可补齐。")
+                        error=sl.tr("大部分修改已写入，但仍有少量没有生效（GitHub 可能还没更新完）。"
+                                    "等一分钟后点「查看剩余修改」，再应用一次即可补齐。",
+                                    "Most changes were written, but a few have not taken effect yet (GitHub may "
+                                    "still be updating). Wait a minute, click “Review remaining changes” and "
+                                    "apply once more."))
         except sl.ApplyAborted as exc:
-            msg = (f"第 {exc.step}/{exc.total} 步没有成功：{exc.op}\n原因：{exc.cause}\n\n"
-                   f"前 {max(exc.step - 1, 0)} 步已经写入 GitHub 并会保留。处理好原因后点「查看剩余修改」，"
-                   f"再点「应用到 GitHub」，会从当前进度继续。")
+            done = max(exc.step - 1, 0)
+            msg = sl.tr(f"第 {exc.step}/{exc.total} 步没有成功：{exc.op}\n原因：{exc.cause}\n\n"
+                        f"前 {done} 步已经写入 GitHub 并会保留。处理好原因后点「查看剩余修改」，"
+                        f"再点「应用到 GitHub」，会从当前进度继续。",
+                        f"Step {exc.step}/{exc.total} failed: {exc.op}\nReason: {exc.cause}\n\n"
+                        f"The first {done} step(s) were written to GitHub and stay. Fix the cause, click "
+                        f"“Review remaining changes”, then “Apply to GitHub” to continue from here.")
             if exc.list_limit_hint:
-                msg += "\n\n如果原因是列表数量已达上限：在预览里勾选「先删除旧列表，再新建」再试。"
+                msg += sl.tr("\n\n如果原因是列表数量已达上限：在预览里勾选「先删除旧列表，再新建」再试。",
+                             "\n\nIf you hit the limit on the number of lists: tick “Delete old lists "
+                             "before creating new ones” in the preview and try again.")
             job.set(status="failed", finished=time.time(), error=msg)
         except sl.StarListsError as exc:
             job.set(status="failed", error=str(exc), finished=time.time())
@@ -537,6 +574,7 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
             return data
 
         def _handle(self) -> None:
+            sl.set_lang(self.headers.get("X-Lang") or app.lang)  # messages follow the page's language
             path = urlparse(self.path).path
             if not self._host_ok():
                 return self._json(403, {"error": "forbidden"})
@@ -544,14 +582,17 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
                 try:
                     return self._send(200, HTML_PATH.read_bytes(), "text/html; charset=utf-8")
                 except FileNotFoundError:
-                    return self._json(500, {"error": f"缺少 {HTML_PATH.name}，请把它放在 {HERE}"})
+                    return self._json(500, {"error": sl.tr(f"缺少 {HTML_PATH.name}，请把它放在 {HERE}",
+                                                           f"{HTML_PATH.name} is missing; put it in {HERE}")})
             if path == "/favicon.ico":
                 return self._send(204, b"", "image/x-icon")
             route = routes.get((self.command, path))
             if route is None:
                 return self._json(404, {"error": "not found"})
             if not self._authorized():
-                return self._json(401, {"error": "链接缺少会话密钥。请使用终端里显示的完整链接打开（末尾带 #t=…）。"})
+                return self._json(401, {"error": sl.tr("链接缺少会话密钥。请使用终端里显示的完整链接打开（末尾带 #t=…）。",
+                                                       "The link has no session key. Open the full link shown "
+                                                       "in the terminal (it ends with #t=…).")})
             try:
                 body = self._body() if self.command in ("POST", "PUT") else {}
                 self._json(200, route(body))
@@ -560,7 +601,7 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
             except sl.StarListsError as exc:
                 self._json(400, {"error": str(exc)})
             except (ValueError, UnicodeDecodeError) as exc:
-                self._json(400, {"error": f"请求格式不正确：{exc}"})
+                self._json(400, {"error": sl.tr("请求格式不正确：", "Malformed request: ") + str(exc)})
             except Exception as exc:  # noqa: BLE001
                 traceback.print_exc()
                 self._json(500, {"error": f"{type(exc).__name__}: {exc}"})
@@ -634,7 +675,8 @@ def watch_parent(server: ThreadingHTTPServer, app: App, parent: int) -> None:
         time.sleep(2)
         if os.getppid() == parent or app.job.status == "running":
             continue
-        print("启动 Starshelf 的应用已经退出，后台随之关闭。", flush=True)
+        print(sl.tr("启动 Starshelf 的应用已经退出，后台随之关闭。",
+                    "The app that started Starshelf has quit, so the backend stops too."), flush=True)
         server.shutdown()
         return
 
@@ -649,7 +691,8 @@ def build_server(app: App, port: int, tries: int = 20) -> ThreadingHTTPServer:
             return server
         except OSError as exc:
             last = exc
-    raise sl.StarListsError(f"无法监听本地端口 {port}-{port + tries - 1}: {last}")
+    raise sl.StarListsError(sl.tr(f"无法监听本地端口 {port}-{port + tries - 1}: {last}",
+                                  f"Cannot listen on a local port in {port}-{port + tries - 1}: {last}"))
 
 
 def main(argv: Optional[list[str]] = None, client: Optional[sl.Client] = None) -> int:
@@ -663,43 +706,51 @@ def main(argv: Optional[list[str]] = None, client: Optional[sl.Client] = None) -
                     help="shut down when the launching process exits (used by the macOS app)")
     ap.add_argument("--sleep", type=float, default=1.0, help="seconds between GitHub writes (default 1.0)")
     ap.add_argument("--settle", type=float, default=2.0, help=argparse.SUPPRESS)
+    ap.add_argument("--lang", choices=sl.LANGS, default=default_lang(),
+                    help="language of terminal messages and the page's default (default: from LANG/LC_ALL)")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = ap.parse_args(argv)
+    sl.set_default_lang(args.lang)
     try:
         if not HTML_PATH.exists():
-            raise sl.StarListsError(f"缺少 {HTML_PATH.name}，请把它和本脚本放在同一个文件夹")
+            raise sl.StarListsError(sl.tr(f"缺少 {HTML_PATH.name}，请把它和本脚本放在同一个文件夹",
+                                          f"{HTML_PATH.name} is missing; put it in the same folder as this script"))
         workdir = Path(args.dir).expanduser().resolve()
         workdir.mkdir(parents=True, exist_ok=True)
         existing = running_instance(workdir)
         if existing:  # one server per data folder, so two windows never edit the same draft
-            print(f"Starshelf 已在运行: {existing}", flush=True)
+            print(sl.tr(f"Starshelf 已在运行: {existing}", f"Starshelf is already running: {existing}"), flush=True)
             if not args.no_browser:
                 webbrowser.open(existing)
             return 0
         client = client or sl.GitHubClient(sl.resolve_token())
         app = App(client, workdir, sleep=args.sleep, settle=args.settle,
-                  suggesters=ai.default_backends())
+                  suggesters=ai.default_backends(), lang=args.lang)
         server = build_server(app, args.port)
     except sl.StarListsError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     port = server.server_address[1]
-    url = f"http://127.0.0.1:{port}/#t={app.token}"
+    url = f"http://127.0.0.1:{port}/#t={app.token}&lang={args.lang}"
     write_lock(workdir, url, port)
     for sig in (signal.SIGTERM, getattr(signal, "SIGHUP", None)):  # no SIGHUP on Windows
         if sig is not None:
             signal.signal(sig, _interrupt)
     if args.exit_with_parent:
         threading.Thread(target=watch_parent, args=(server, app, os.getppid()), daemon=True).start()
-    print(f"Starshelf 已启动: {url}\n数据文件夹: {workdir}\n关闭: 在这个窗口按 Ctrl+C", flush=True)
+    print(sl.tr(f"Starshelf 已启动: {url}\n数据文件夹: {workdir}\n关闭: 在这个窗口按 Ctrl+C",
+                f"Starshelf is running: {url}\nData folder: {workdir}\nTo stop: press Ctrl+C in this window"),
+          flush=True)
     if not args.no_browser:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         if app.job.status == "running":
-            print("\n注意：写入 GitHub 时被中断。已完成的部分会保留，下次打开后点「查看剩余修改」继续。", flush=True)
-        print("\n已关闭。", flush=True)
+            print(sl.tr("\n注意：写入 GitHub 时被中断。已完成的部分会保留，下次打开后点「查看剩余修改」继续。",
+                        "\nNote: writing to GitHub was interrupted. The finished part stays; next time, click "
+                        "“Review remaining changes” to continue."), flush=True)
+        print(sl.tr("\n已关闭。", "\nStopped."), flush=True)
     finally:
         server.server_close()
         remove_lock(workdir)

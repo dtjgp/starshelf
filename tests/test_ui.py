@@ -33,7 +33,8 @@ g = FakeGitHub.from_snapshot(SNAP, page=100)
 initial = g.view()
 work = Path(tempfile.mkdtemp(prefix="sl_ui_")) / "stars_backup"
 fake = FakeSuggester(id="claude-code", label="Claude Code", provider="Anthropic")
-fake_codex = FakeSuggester(id="codex", label="Codex", provider="OpenAI", warning=ai.CODEX_WARNING)
+fake_codex = FakeSuggester(id="codex", label="Codex", provider="OpenAI",
+                           warning=lambda: ai.sl.tr(ai.CODEX_WARNING, ai.CODEX_WARNING_EN))
 app = ui.App(g, work, sleep=0, settle=0, suggesters=[fake, fake_codex])
 server = ui.build_server(app, 18765)
 port = server.server_address[1]
@@ -42,10 +43,17 @@ URL = f"http://127.0.0.1:{port}/#t={app.token}"
 
 
 def raw(method: str, path: str, headers: dict[str, str]) -> int:
+    return call(method, path, headers)[0]
+
+
+def call(method: str, path: str, headers: dict[str, str], body: object = None) -> tuple[int, dict]:
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    c.request(method, path, headers=headers)
-    r = c.getresponse(); r.read(); c.close()
-    return r.status
+    c.request(method, path, body=None if body is None else json.dumps(body), headers=headers)
+    r = c.getresponse(); data = r.read(); c.close()
+    try:
+        return r.status, json.loads(data or b"{}")
+    except ValueError:
+        return r.status, {}
 
 
 # ---------------------------------------------------------------- security
@@ -54,6 +62,20 @@ check("foreign Host header -> 403 (DNS rebinding)", raw("GET", "/", {"Host": "ev
 check("foreign Origin -> 401 (CSRF)", raw("GET", "/api/state", {"X-Session": app.token, "Origin": "http://evil.example"}) == 401)
 check("page itself is served", raw("GET", "/", {}) == 200)
 
+# ---------------------------------------------------------------- server messages follow X-Lang
+AUTH = {"X-Session": app.token, "Content-Type": "application/json"}
+ui.sl.set_lang("zh")  # direct App calls below run in this thread, like a request from a Chinese page
+call("GET", "/api/state", AUTH)  # loads the baseline
+code_en, body_en = call("POST", "/api/chat", {**AUTH, "X-Lang": "en"}, {"lists": [], "message": " "})
+code_zh, body_zh = call("POST", "/api/chat", {**AUTH, "X-Lang": "zh"}, {"lists": [], "message": " "})
+check("API errors in the page's language (X-Lang)", code_en == code_zh == 400
+      and body_en.get("error") == "Type a message for the AI first." and body_zh.get("error") == "请先输入要对 AI 说的话。",
+      f"{body_en} {body_zh}")
+code_none, body_none = call("POST", "/api/chat", AUTH, {"lists": [], "message": " "})
+check("no X-Lang -> the server's default language", body_none.get("error") == "Type a message for the AI first.", str(body_none))
+check("unknown X-Lang -> English", call("POST", "/api/chat", {**AUTH, "X-Lang": "fr"}, {"lists": [], "message": " "})[1].get("error")
+      == "Type a message for the AI first.")
+
 starred = {r["id"]: r for r in json.load(open(SNAP))["repos"] if r["starred"]}
 paper_hits = sorted(r["full_name"] for r in starred.values()
                     if "paper" in (r["full_name"] + " " + (r["description"] or "")).lower())
@@ -61,13 +83,15 @@ errors: list[str] = []
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
-    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="zh-CN")
     page = ctx.new_page()
     page.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
     page.on("console", lambda m: m.type == "error" and errors.append(f"console: {m.text}"))
     page.goto(URL)
     expect(page.locator("#app")).to_be_visible(timeout=15000)
     rows = page.locator("#rows .row")
+    check("a Chinese browser gets the Chinese page", page.locator("#uiLang").input_value() == "zh"
+          and page.locator("#viewTitle").inner_text() == "全部 star" and page.evaluate("document.documentElement.lang") == "zh-CN")
     check("all view shows 321 repos", rows.count() == 321, str(rows.count()))
     check("sidebar counts", page.locator("#nAll").inner_text() == "321" and page.locator("#nNone").inner_text() == "12")
     check("9 lists in sidebar", page.locator("#lists .litem").count() == 9)
@@ -369,7 +393,7 @@ with sync_playwright() as p:
     expect(page.locator("#chat")).to_be_visible()
     expect(page.locator("#chatBackend option").first).to_have_text("Claude Code", timeout=10000)
     check("drawer opens beside the list with examples", page.locator("#chatLog .chat-empty li").count() == 4
-          and page.locator("#main").is_visible())
+          and page.locator("#main").is_visible() and "量化" in page.locator("#chatLog .chat-empty").inner_text())
     ai_msgs = page.locator("#chatLog .msg.ai:not(.pending)")
     page.fill("#chatInput", "请把第二个列表的两个仓库移到第一个")
     page.keyboard.press("Enter")
@@ -482,7 +506,86 @@ with sync_playwright() as p:
     page.click("#chatClose")
     check("close hides the drawer", page.locator("#chat").is_hidden())
     check("AI assistant never writes to GitHub", g.mutations == muts)
+    check("the Chinese page asks for replies in Chinese", "in Simplified Chinese" in fake.calls[-1].system
+          and "「预览修改」" in fake.calls[-1].system)
     check("no JS errors", not errors, "\n".join(errors[:10]))
+
+    # -- English: browser language, the switch, server messages and the AI's reply language
+    en_ctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="en-US")
+    ep = en_ctx.new_page()
+    ep.on("pageerror", lambda e: errors.append(f"en pageerror: {e}"))
+    ep.on("console", lambda m: m.type == "error" and errors.append(f"en console: {m.text}"))
+    ep.goto(URL)
+    expect(ep.locator("#app")).to_be_visible(timeout=15000)
+    check("an English browser gets the English page", ep.locator("#uiLang").input_value() == "en"
+          and ep.locator("#viewTitle").inner_text() == "All stars" and ep.evaluate("document.documentElement.lang") == "en"
+          and ep.locator("#btnRefresh").inner_text() == "Refresh" and ep.locator("#countLabel").inner_text().endswith("repositories"))
+    han = ep.evaluate("""() => { const out = [];
+        const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        while (walk.nextNode()) { const n = walk.currentNode, el = n.parentElement;
+          if (el.closest("option[lang=zh-CN], #rows, #lists, #viewTitle, #viewDesc, script")) continue;  // repo/list data
+          if (/[\u4e00-\u9fff]/.test(n.textContent)) out.push(n.textContent.trim()); }
+        for (const el of document.querySelectorAll("[title], [placeholder], [aria-label]"))
+          for (const a of ["title", "placeholder", "aria-label"]) { const v = el.getAttribute(a) || "";
+            if (/[\u4e00-\u9fff]/.test(v) && !el.closest("#rows, #lists") && el.id !== "uiLang") out.push(a + ": " + v); }
+        return out; }""")
+    check("no Chinese left in the English page chrome", not han, str(han[:8]))
+    ep.locator("#rows .row").first.locator("input[type=checkbox]").check()
+    check("selection bar in English", ep.locator("#countLabel").inner_text() == "1 selected"
+          and ep.locator("#bAdd").inner_text() == "Add to list…")
+    ep.click("#bAdd")
+    check("list picker in English", ep.locator("#popover .ph").inner_text().startswith("Add ")
+          and ep.locator("#popover input[type=search]").get_attribute("placeholder") == "Find a list")
+    ep.keyboard.press("Escape")
+    ep.click("#btnNewList")
+    ep.fill("#ldName", "English List")
+    ep.click("#ldSave")
+    expect(ep.locator("#toast")).to_contain_text("Created “English List”")
+    ep.click("#btnReview")
+    expect(ep.locator("#rvBody h2")).to_have_text("Confirm the changes to write to GitHub", timeout=15000)
+    lead = ep.locator("#rvBody .lead").inner_text()
+    check("preview summary in English", lead.startswith("Create 1 list, change the lists of 1 repository.") and "writes in total" in lead, lead)
+    ep.locator("#rvActions button", has_text="Cancel").click()
+    # switch to Chinese and back: everything redraws, and the choice is remembered in this browser
+    ep.select_option("#uiLang", "zh")
+    check("switching to 中文 redraws the page", ep.locator("#viewTitle").inner_text() == "全部 star"
+          and ep.locator("#btnReview").inner_text().startswith("预览修改") and "新建" in ep.locator("#lists").inner_text()
+          and ep.locator("#btnUndo").get_attribute("title") == "撤销 (⌘Z)")
+    ep.reload()
+    expect(ep.locator("#app")).to_be_visible(timeout=15000)
+    check("the language choice survives a reload", ep.locator("#uiLang").input_value() == "zh"
+          and ep.locator("#viewTitle").inner_text() == "全部 star")
+    ep.select_option("#uiLang", "en")
+    check("switching back to English", ep.locator("#viewTitle").inner_text() == "All stars"
+          and ep.locator("#saveState").inner_text() == "Draft saved automatically")
+    ep.click("#btnDiscard")
+    fake.available = fake_codex.available = False
+    ep.click("#btnChat")
+    expect(ep.locator("#chatNote .warn")).to_contain_text("is not signed in", timeout=10000)
+    check("AI setup help comes in English", "Run this in a terminal" in ep.locator("#chatNote").inner_text()
+          and ep.locator("#chatBackend option").first.inner_text() == "Claude Code (unavailable)")
+    fake.available = fake_codex.available = True
+    ep.select_option("#uiLang", "zh")   # a switch fetches the backend status again, in the new language
+    expect(ep.locator("#chatLog .chat-empty")).to_contain_text("告诉 AI", timeout=10000)
+    ep.select_option("#uiLang", "en")
+    ep.select_option("#chatBackend", "codex")
+    expect(ep.locator("#chatNote")).to_contain_text("read files on your computer", timeout=10000)
+    ep.select_option("#chatBackend", "claude-code")
+    expect(ep.locator("#chatSend")).to_be_enabled(timeout=10000)
+    ep.fill("#chatInput", "hello")
+    ep.click("#chatSend")
+    expect(ep.locator("#chatLog .msg.ai").last).to_contain_text("好的", timeout=10000)
+    check("the English page asks for replies in English", "in English" in fake.calls[-1].system
+          and '"Preview changes"' in fake.calls[-1].system and "Simplified Chinese" not in fake.calls[-1].system)
+    ep.screenshot(path=str(OUT / "15-english.png"))
+    en_ctx.close()
+    # the launcher's #lang= hint is used when this browser has not chosen a language yet
+    hint_ctx = browser.new_context(viewport={"width": 1440, "height": 900}, locale="en-US")
+    hp = hint_ctx.new_page(); hp.goto(URL + "&lang=zh")
+    expect(hp.locator("#app")).to_be_visible(timeout=15000)
+    check("#lang=zh in the link picks Chinese", hp.locator("#viewTitle").inner_text() == "全部 star")
+    hint_ctx.close()
+    check("no JS errors (English page)", not errors, "\n".join(errors[:10]))
 
     # -- screenshots: dark + narrow
     dark = browser.new_context(viewport={"width": 1440, "height": 900}, color_scheme="dark")

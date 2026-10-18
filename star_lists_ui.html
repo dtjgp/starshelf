@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -108,6 +108,8 @@ input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--focus); ma
 .who b { font-weight: 600; }
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .save-state { font-size: 12.5px; color: var(--ink-3); margin-right: 6px; }
+.ui-lang { font-size: 12.5px; padding: 4px 6px; border-color: transparent; background: transparent; color: var(--ink-2); }
+.ui-lang:hover { border-color: var(--rule); }
 .count {
   display: inline-block; min-width: 1.7em; margin-left: 7px; padding: 0 6px;
   border-radius: 9px; background: var(--gold-soft); color: var(--gold);
@@ -317,7 +319,7 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
 .chat-resize:focus-visible { outline: none; }
 body.resizing { cursor: col-resize; user-select: none; }
 .chat-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--rule-2); }
-.chat-head h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
+.chat-head h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-head select { max-width: 150px; font-size: 12.5px; padding: 4px 6px; }
 .chat-note { padding: 8px 14px 0; font-size: 12.5px; color: var(--ink-2); }
 .chat-note:empty { display: none; }
@@ -362,6 +364,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .chat-foot { border-top: 1px solid var(--rule-2); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .chat-foot textarea { width: 100%; resize: none; min-height: 64px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--sunk); color: var(--ink); font-size: 14px; }
 .chat-row { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-3); }
+.chat-row .keys { white-space: nowrap; }
 .chat-divider { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 12px; margin: 2px 0; white-space: nowrap; }
 .chat-divider::before, .chat-divider::after { content: ""; flex: 1; border-top: 1px dashed var(--rule); }
 .msg.old { opacity: .62; }
@@ -403,8 +406,8 @@ body.resizing { cursor: col-resize; user-select: none; }
 <div id="boot" class="boot">
   <div>
     <svg class="star spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.83 6.08 6.67.72-4.98 4.5 1.4 6.56L12 17.1l-5.92 3.36 1.4-6.56-4.98-4.5 6.67-.72z"/></svg>
-    <p id="bootMsg">正在从 GitHub 读取你的 star 和列表…</p>
-    <button id="bootRetry" hidden>重试</button>
+    <p id="bootMsg"></p>
+    <button id="bootRetry" data-i18n="retry" hidden></button>
   </div>
 </div>
 
@@ -417,28 +420,32 @@ body.resizing { cursor: col-resize; user-select: none; }
     <div class="who"><b id="login"></b><span id="synced" class="muted small"></span></div>
     <div class="top-actions">
       <span id="saveState" class="save-state"></span>
-      <button id="btnUndo" class="ghost" title="撤销 (⌘Z)">撤销</button>
-      <button id="btnRedo" class="ghost" title="重做 (⇧⌘Z)">重做</button>
-      <button id="btnBackups" class="ghost">备份</button>
-      <button id="btnRefresh" class="ghost">重新读取</button>
-      <button id="btnDiscard" class="ghost danger">放弃修改</button>
-      <button id="btnChat" title="和 AI 对话，随时调整草稿（不会直接写入 GitHub）">AI 助手</button>
-      <button id="btnReview" class="primary">预览修改<span id="changeCount" class="count">0</span></button>
+      <button id="btnUndo" class="ghost" data-i18n="undo" data-i18n-title="undoTitle"></button>
+      <button id="btnRedo" class="ghost" data-i18n="redo" data-i18n-title="redoTitle"></button>
+      <button id="btnBackups" class="ghost" data-i18n="backups"></button>
+      <button id="btnRefresh" class="ghost" data-i18n="refresh"></button>
+      <button id="btnDiscard" class="ghost danger" data-i18n="discard"></button>
+      <button id="btnChat" data-i18n="aiAssistant" data-i18n-title="aiTitle"></button>
+      <button id="btnReview" class="primary"></button>
+      <select id="uiLang" class="ui-lang" data-i18n-aria="uiLang">
+        <option value="zh" lang="zh-CN">中文</option>
+        <option value="en" lang="en">English</option>
+      </select>
     </div>
   </header>
 
-  <aside class="side" aria-label="视图和列表">
+  <aside class="side" data-i18n-aria="sideAria">
     <nav>
-      <button class="vbtn" data-view="all"><span>全部 star</span><span class="n" id="nAll"></span></button>
-      <button class="vbtn" data-view="none"><span>不在任何列表</span><span class="n" id="nNone"></span></button>
-      <button class="vbtn" data-view="unstar" id="vUnstar" hidden><span>将取消 star</span><span class="n" id="nUnstar"></span></button>
+      <button class="vbtn" data-view="all"><span data-i18n="allStars"></span><span class="n" id="nAll"></span></button>
+      <button class="vbtn" data-view="none"><span data-i18n="noList"></span><span class="n" id="nNone"></span></button>
+      <button class="vbtn" data-view="unstar" id="vUnstar" hidden><span data-i18n="toUnstar"></span><span class="n" id="nUnstar"></span></button>
     </nav>
     <div class="side-head">
-      <h2>列表</h2>
-      <button id="btnNewList" class="ghost small">新建列表</button>
+      <h2 data-i18n="lists"></h2>
+      <button id="btnNewList" class="ghost small" data-i18n="newList"></button>
     </div>
     <ul id="lists" class="lists"></ul>
-    <p id="dragHint" class="hint" hidden>拖到列表上即可加入。按住 ⌥ Option 改为移动。拖到「不在任何列表」会移出所有列表。</p>
+    <p id="dragHint" class="hint" data-i18n="dragHint" hidden></p>
   </aside>
 
   <main class="main" id="main">
@@ -448,102 +455,102 @@ body.resizing { cursor: col-resize; user-select: none; }
           <h1 id="viewTitle"></h1>
           <p id="viewDesc"></p>
         </div>
-        <button id="btnEditList" hidden>编辑列表</button>
+        <button id="btnEditList" data-i18n="editList" hidden></button>
       </div>
       <div id="banner" class="banner" hidden></div>
       <div class="toolbar">
         <label class="search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-          <input id="q" type="search" placeholder="搜索仓库名或描述" autocomplete="off" aria-label="搜索仓库">
+          <input id="q" type="search" data-i18n-placeholder="searchPh" autocomplete="off" data-i18n-aria="searchAria">
           <kbd>/</kbd>
         </label>
-        <select id="lang" aria-label="按语言筛选"></select>
-        <select id="sort" aria-label="排序">
-          <option value="starred">最近 star</option>
-          <option value="name">名称</option>
-          <option value="stars">star 最多</option>
-          <option value="pushed">最近更新</option>
+        <select id="lang" data-i18n-aria="langFilter"></select>
+        <select id="sort" data-i18n-aria="sort">
+          <option value="starred" data-i18n="sortStarred"></option>
+          <option value="name" data-i18n="sortName"></option>
+          <option value="stars" data-i18n="sortStars"></option>
+          <option value="pushed" data-i18n="sortPushed"></option>
         </select>
-        <label class="toggle"><input type="checkbox" id="changedOnly"> 只看改动</label>
+        <label class="toggle"><input type="checkbox" id="changedOnly"> <span data-i18n="changedOnly"></span></label>
       </div>
       <div id="listhead" class="listhead">
-        <input type="checkbox" id="selAll" aria-label="全选当前显示的仓库">
+        <input type="checkbox" id="selAll" data-i18n-aria="selAll">
         <span id="countLabel"></span>
         <div id="acts" class="acts" hidden>
-          <button id="bAdd">加入列表…</button>
-          <button id="bMove">移动到…</button>
+          <button id="bAdd" data-i18n="addTo"></button>
+          <button id="bMove" data-i18n="moveTo"></button>
           <button id="bRemove"></button>
-          <button id="bClear">移出所有列表</button>
-          <button id="bUnstar" class="danger">取消 star</button>
-          <button id="bKeep">保留 star</button>
-          <button id="bDeselect" class="ghost">取消选择</button>
+          <button id="bClear" data-i18n="clearAll"></button>
+          <button id="bUnstar" class="danger" data-i18n="unstar"></button>
+          <button id="bKeep" data-i18n="keepStar"></button>
+          <button id="bDeselect" class="ghost" data-i18n="deselect"></button>
         </div>
       </div>
     </div>
     <div id="rows" class="rows"></div>
   </main>
 
-  <aside class="chat" id="chat" aria-label="AI 助手">
+  <aside class="chat" id="chat" data-i18n-aria="aiAssistant">
     <div class="chat-resize" id="chatResize" role="separator" aria-orientation="vertical" tabindex="0"
-      aria-label="调整 AI 助手的宽度" title="拖动调整宽度，双击恢复默认"></div>
+      data-i18n-aria="chatResize" data-i18n-title="chatResizeTitle"></div>
     <div class="chat-head">
-      <h2>AI 助手</h2>
-      <select id="chatBackend" aria-label="使用哪个 AI"></select>
-      <button id="chatNew" class="ghost small" title="开始新话题：之前的消息仍可翻看，但不再发给 AI">新对话</button>
-      <button id="chatHistory" class="ghost small" title="查看已存档的对话（只读）">历史</button>
-      <button id="chatClose" class="ghost small" aria-label="关闭 AI 助手">×</button>
+      <h2 data-i18n="aiAssistant"></h2>
+      <select id="chatBackend" data-i18n-aria="chatBackend"></select>
+      <button id="chatNew" class="ghost small" data-i18n="chatNew" data-i18n-title="chatNewTitle"></button>
+      <button id="chatHistory" class="ghost small" data-i18n="chatHistory" data-i18n-title="chatHistoryTitle"></button>
+      <button id="chatClose" class="ghost small" data-i18n-aria="chatClose">×</button>
     </div>
     <div class="chat-note" id="chatNote"></div>
     <div class="chat-log" id="chatLog" role="log" aria-live="polite"></div>
     <form class="chat-foot" id="chatForm">
-      <textarea id="chatInput" rows="3" maxlength="2000" aria-label="对 AI 说的话"
-        placeholder="例如：把量化金融相关的仓库都移到 Finance"></textarea>
-      <div class="chat-row"><span id="chatContext"></span><span class="spacer"></span><span>Enter 发送</span>
-        <button type="submit" class="primary" id="chatSend">发送</button></div>
+      <textarea id="chatInput" rows="3" maxlength="2000" data-i18n-aria="chatInput"
+        data-i18n-placeholder="chatPh"></textarea>
+      <div class="chat-row"><span id="chatContext"></span><span class="spacer"></span><span class="keys" data-i18n="enterSends"></span>
+        <button type="submit" class="primary" id="chatSend" data-i18n="send"></button></div>
     </form>
   </aside>
 </div>
 
 <div id="popover" class="popover" hidden role="dialog"></div>
-<div id="toast" class="toast" hidden role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastUndo">撤销</button></div>
+<div id="toast" class="toast" hidden role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastUndo" data-i18n="undo"></button></div>
 <div id="ghostdrag" class="ghostdrag" aria-hidden="true"></div>
 
 <dialog id="listDialog" aria-labelledby="ldTitle">
   <form id="listForm" novalidate>
     <div class="dlg">
-      <h2 id="ldTitle">新建列表</h2>
-      <label class="field">名称<input id="ldName" maxlength="100" autocomplete="off" required></label>
+      <h2 id="ldTitle"></h2>
+      <label class="field"><span data-i18n="name"></span><input id="ldName" maxlength="100" autocomplete="off" required></label>
       <p id="ldErr" class="field-error" hidden></p>
-      <label class="field">描述（可选）<textarea id="ldDesc" maxlength="300" rows="2"></textarea></label>
+      <label class="field"><span data-i18n="descOptional"></span><textarea id="ldDesc" maxlength="300" rows="2"></textarea></label>
       <fieldset>
-        <legend>谁能看到</legend>
-        <label class="radio"><input type="radio" name="vis" value="public"> 公开，显示在你的 GitHub 主页</label>
-        <label class="radio"><input type="radio" name="vis" value="private"> 私密，只有你能看到</label>
+        <legend data-i18n="whoSees"></legend>
+        <label class="radio"><input type="radio" name="vis" value="public"> <span data-i18n="visPublic"></span></label>
+        <label class="radio"><input type="radio" name="vis" value="private"> <span data-i18n="visPrivate"></span></label>
       </fieldset>
       <label class="check" id="ldWithWrap" hidden><input type="checkbox" id="ldWith"> <span id="ldWithText"></span></label>
     </div>
     <div class="dlg-actions">
-      <button type="button" id="ldDelete" class="ghost danger" hidden>删除列表</button>
+      <button type="button" id="ldDelete" class="ghost danger" hidden></button>
       <span class="spacer"></span>
-      <button type="button" id="ldCancel">取消</button>
-      <button type="submit" id="ldSave" class="primary">创建</button>
+      <button type="button" id="ldCancel" data-i18n="cancel"></button>
+      <button type="submit" id="ldSave" class="primary"></button>
     </div>
   </form>
 </dialog>
 
-<dialog id="reviewDialog" class="wide" aria-label="预览修改">
+<dialog id="reviewDialog" class="wide" data-i18n-aria="preview">
   <div class="dlg" id="rvBody"></div>
   <div class="dlg-actions" id="rvActions"></div>
 </dialog>
 
 <dialog id="backupDialog" class="wide" aria-labelledby="bkTitle">
   <div class="dlg">
-    <h2 id="bkTitle">备份与恢复</h2>
-    <p class="lead">每次应用前都会自动备份 GitHub 上的当前状态。恢复会把列表和归属改回备份时的样子，不会取消任何 star。</p>
-    <p id="bkNote" class="errors" hidden>你有未应用的修改。请先应用或放弃，再恢复备份。</p>
+    <h2 id="bkTitle" data-i18n="bkTitle"></h2>
+    <p class="lead" data-i18n="bkLead"></p>
+    <p id="bkNote" class="errors" data-i18n="bkDirty" hidden></p>
     <div id="bkList" class="snaps"></div>
   </div>
-  <div class="dlg-actions"><span class="spacer"></span><button id="bkClose">关闭</button></div>
+  <div class="dlg-actions"><span class="spacer"></span><button id="bkClose" data-i18n="close"></button></div>
 </dialog>
 
 <script>
@@ -596,18 +603,342 @@ const fmtNum = n => n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M"
   : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "") + "k" : String(n || 0);
 const fmtTime = iso => {
   if (!iso) return "";
-  try { return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)); }
+  try { return new Intl.DateTimeFormat(LANG === "zh" ? "zh-CN" : "en-US", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)); }
   catch (_) { return iso; }
 };
+// ------------------------------------------------------------------ language
+// Every string the page shows, as [Simplified Chinese, English]; a function takes the values to fill in.
+// The language comes from this browser's choice (the switch in the top bar), else the #lang= the
+// launcher put in the link, else the browser's own language. API calls send it (X-Lang) so the
+// server's messages and the AI's replies follow it.
+const LANG_KEY = "sl-ui-lang";
+let LANG = (() => {
+  try { const v = localStorage.getItem(LANG_KEY); if (v === "zh" || v === "en") return v; } catch (_) {}
+  const hinted = new URLSearchParams(location.hash.slice(1)).get("lang");
+  if (hinted === "zh" || hinted === "en") return hinted;
+  return /^zh/i.test((navigator.languages && navigator.languages[0]) || navigator.language || "") ? "zh" : "en";
+})();
+const q = name => LANG === "zh" ? `「${name}」` : `“${name}”`;
+const en = (n, one, many) => `${n} ${n === 1 ? one : many || one + "s"}`;
+const enRepos = n => en(n, "repository", "repositories");
+const STR = {
+  // static parts of the page (data-i18n*)
+  loading: ["正在从 GitHub 读取你的 star 和列表…", "Reading your stars and lists from GitHub…"],
+  retry: ["重试", "Retry"],
+  uiLang: ["界面语言", "Language"],
+  undo: ["撤销", "Undo"], undoTitle: ["撤销 (⌘Z)", "Undo (⌘Z)"],
+  redo: ["重做", "Redo"], redoTitle: ["重做 (⇧⌘Z)", "Redo (⇧⌘Z)"],
+  backups: ["备份", "Backups"],
+  refresh: ["重新读取", "Refresh"],
+  discard: ["放弃修改", "Discard changes"],
+  aiAssistant: ["AI 助手", "AI assistant"],
+  aiTitle: ["和 AI 对话，随时调整草稿（不会直接写入 GitHub）", "Chat with an AI to adjust the draft (it never writes to GitHub directly)"],
+  sideAria: ["视图和列表", "Views and lists"],
+  allStars: ["全部 star", "All stars"],
+  noList: ["不在任何列表", "In no list"],
+  toUnstar: ["将取消 star", "To be unstarred"],
+  lists: ["列表", "Lists"],
+  newList: ["新建列表", "New list"],
+  dragHint: ["拖到列表上即可加入。按住 ⌥ Option 改为移动。拖到「不在任何列表」会移出所有列表。",
+             "Drop on a list to add. Hold ⌥ Option to move instead. Drop on “In no list” to take them out of every list."],
+  editList: ["编辑列表", "Edit list"],
+  searchPh: ["搜索仓库名或描述", "Search repositories"],
+  searchAria: ["搜索仓库", "Search repositories by name or description"],
+  langFilter: ["按语言筛选", "Filter by language"],
+  sort: ["排序", "Sort"],
+  sortStarred: ["最近 star", "Recently starred"], sortName: ["名称", "Name"],
+  sortStars: ["star 最多", "Most stars"], sortPushed: ["最近更新", "Recently updated"],
+  changedOnly: ["只看改动", "Changed only"],
+  selAll: ["全选当前显示的仓库", "Select all shown repositories"],
+  addTo: ["加入列表…", "Add to list…"], moveTo: ["移动到…", "Move to…"],
+  clearAll: ["移出所有列表", "Remove from all lists"],
+  unstar: ["取消 star", "Unstar"], keepStar: ["保留 star", "Keep star"],
+  deselect: ["取消选择", "Clear selection"],
+  chatResize: ["调整 AI 助手的宽度", "Resize the AI assistant"],
+  chatResizeTitle: ["拖动调整宽度，双击恢复默认", "Drag to resize; double-click to reset"],
+  chatBackend: ["使用哪个 AI", "Which AI to use"],
+  chatNew: ["新对话", "New chat"],
+  chatNewTitle: ["开始新话题：之前的消息仍可翻看，但不再发给 AI", "Start a new topic: earlier messages stay visible but are no longer sent to the AI"],
+  chatHistory: ["历史", "History"],
+  chatHistoryTitle: ["查看已存档的对话（只读）", "View archived conversations (read-only)"],
+  chatClose: ["关闭 AI 助手", "Close the AI assistant"],
+  chatInput: ["对 AI 说的话", "Message to the AI"],
+  chatPh: ["例如：把量化金融相关的仓库都移到 Finance", "For example: move the quant finance repos to Finance"],
+  enterSends: ["Enter 发送", "Enter to send"],
+  send: ["发送", "Send"],
+  name: ["名称", "Name"],
+  descOptional: ["描述（可选）", "Description (optional)"],
+  whoSees: ["谁能看到", "Who can see it"],
+  visPublic: ["公开，显示在你的 GitHub 主页", "Public, shown on your GitHub profile"],
+  visPrivate: ["私密，只有你能看到", "Private, only you can see it"],
+  deleteList: ["删除列表", "Delete list"],
+  cancel: ["取消", "Cancel"],
+  create: ["创建", "Create"], save: ["保存", "Save"],
+  preview: ["预览修改", "Preview changes"],
+  bkTitle: ["备份与恢复", "Backups and restore"],
+  bkLead: ["每次应用前都会自动备份 GitHub 上的当前状态。恢复会把列表和归属改回备份时的样子，不会取消任何 star。",
+           "Before every apply, the current state on GitHub is backed up automatically. Restoring puts the lists and memberships back as they were in the backup; it never removes a star."],
+  bkDirty: ["你有未应用的修改。请先应用或放弃，再恢复备份。", "You have unapplied changes. Apply or discard them before you restore a backup."],
+  close: ["关闭", "Close"],
+
+  // requests, undo, toasts
+  httpFail: [s => `请求失败（HTTP ${s}）`, s => `Request failed (HTTP ${s})`],
+  undone: ["已撤销", "Undone"], redone: ["已重做", "Redone"],
+  nRepos: [n => `${n} 个仓库`, enRepos],
+  added: [(w, l) => `已把 ${w} 加入${q(l)}`, (w, l) => `Added ${w} to ${q(l)}`],
+  alreadyIn: [(w, l) => `${w} 已经在${q(l)}里`, (w, l) => `${w} is already in ${q(l)}`],
+  removed: [(w, l) => `已把 ${w} 移出${q(l)}`, (w, l) => `Removed ${w} from ${q(l)}`],
+  moved: [(w, a, b) => `已把 ${w} 从${q(a)}移到${q(b)}`, (w, a, b) => `Moved ${w} from ${q(a)} to ${q(b)}`],
+  cleared: [w => `已把 ${w} 移出所有列表`, w => `Removed ${w} from all lists`],
+  markedUnstar: [w => `已标记 ${w} 取消 star（应用到 GitHub 时才会执行）`, w => `Marked ${w} to unstar (it happens only when you apply to GitHub)`],
+  keepsStar: [w => `${w} 会保留 star`, w => `${w} will stay starred`],
+  saving: ["正在保存草稿…", "Saving the draft…"],
+  saved: ["草稿已自动保存", "Draft saved automatically"],
+  saveFailed: [m => "草稿保存失败：" + m, m => "Could not save the draft: " + m],
+
+  // top bar and sidebar
+  readAt: [s => "读取于 " + s, s => "Loaded " + s],
+  refreshBlocked: ["有未应用的修改时不能重新读取。请先应用或放弃修改。", "You cannot refresh while changes are unapplied. Apply or discard them first."],
+  refreshTitle: ["从 GitHub 读取最新的 star 和列表", "Read the latest stars and lists from GitHub"],
+  applyingStep: [(a, b) => `正在应用 ${a}/${b}`, (a, b) => `Applying ${a}/${b}`],
+  applying: ["正在应用…", "Applying…"],
+  noLists: ["还没有列表。点「新建列表」开始。", "No lists yet. Click “New list” to start."],
+  badgeNew: ["新建", "New"], badgeRenamed: ["改名", "Renamed"], badgeDelete: ["将删除", "Deleting"],
+  oldName: [n => "原名：" + n, n => "Was: " + n],
+  hasChanges: ["有改动", "Changed"],
+  restore: ["恢复", "Restore"], edit: ["编辑", "Edit"],
+  editNamed: [n => `编辑${q(n)}`, n => `Edit ${q(n)}`],
+
+  // main view
+  allDesc: ["你 star 过的所有仓库。勾选后批量加入列表，或直接拖到左边的列表上。",
+            "Every repository you starred. Select some to add them to a list in bulk, or drag them onto a list on the left."],
+  noneDesc: ["这些仓库已经 star，但还没有归入任何列表。", "These repositories are starred but not in any list yet."],
+  unstarDesc: ["应用到 GitHub 时，这些仓库会先移出所有列表，最后一步才取消 star。点「保留 star」可以撤回。",
+               "When you apply to GitHub, these repositories first leave every list, and their star goes as the very last step. Click “Keep star” to take one back."],
+  notYet: ["还没有写入 GitHub。", "Not written to GitHub yet. "],
+  unstarPending: [n => `这 ${n} 个仓库现在仍然有 star，这里只是草稿里的标记。点「预览修改」，勾选确认，再点「应用到 GitHub」，才会真正取消。`,
+                  n => `${n === 1 ? "This repository is" : `These ${n} repositories are`} still starred; this is only a mark in your draft. Click “Preview changes”, tick the confirmation, then “Apply to GitHub” to really unstar.`],
+  private: ["私密", "Private"],
+  noDesc: ["没有描述", "No description"],
+  listDoomed: ["这个列表会在应用时删除，其中的仓库仍保持 star。", "This list will be deleted when you apply; its repositories stay starred."],
+  restoreList: ["恢复这个列表", "Restore this list"],
+  emptyFiltered: ["没有符合当前筛选条件的仓库。清空搜索或筛选后再看看。", "No repositories match the current filters. Clear the search or filters and look again."],
+  emptyNone: ["所有 star 都已经归入列表了。", "Every star is already in a list."],
+  emptyUnstar: ["没有要取消 star 的仓库。", "No repositories are marked to unstar."],
+  emptyAll: ["你还没有 star 任何仓库。", "You have not starred any repositories yet."],
+  emptyList: ["这个列表还是空的。在「全部 star」里勾选仓库后点「加入列表…」，或者直接把仓库拖到左边的这个列表上。",
+              "This list is empty. In “All stars”, select repositories and click “Add to list…”, or drag them onto this list on the left."],
+  selectRepo: [n => "选择 " + n, n => "Select " + n],
+  archived: ["已归档", "Archived"], notStarred: ["未 star", "Not starred"], willUnstar: ["将取消 star", "Will unstar"],
+  removedFrom: [l => `已从${q(l)}移出`, l => `Removed from ${q(l)}`],
+  unstarNote: ["应用时会移出所有列表并取消 star", "When applied, it leaves every list and loses its star"],
+  lastPush: ["最近一次推送", "Last push"],
+  updated: [d => "更新于 " + d, d => "Updated " + d],
+  chipAdded: [l => `新加入${q(l)}`, l => `Newly added to ${q(l)}`],
+  removeFrom: [l => `移出${q(l)}`, l => `Remove from ${q(l)}`],
+  chipDoomed: [l => `${q(l)}将被删除`, l => `${q(l)} will be deleted`],
+  chipRemoved: [l => `已移出${q(l)}，点击撤销`, l => `Removed from ${q(l)}; click to undo`],
+  addOrRemove: ["加入或移出列表", "Add to or remove from lists"],
+  nSelected: [n => `已选 ${n} 个`, n => `${n} selected`],
+  showing: [(a, b) => `显示 ${a} 个，共 ${b} 个`, (a, b) => `Showing ${a} of ${b}`],
+  allLangs: ["全部语言", "All languages"], otherLang: ["其他", "Other"],
+  langCount: [(k, n) => `${k}（${n}）`, (k, n) => `${k} (${n})`],
+
+  // list picker and list dialog
+  findList: ["查找列表", "Find a list"],
+  noMatch: ["没有匹配的列表", "No matching lists"], noOther: ["还没有其他列表", "No other lists yet"],
+  newListDots: ["新建列表…", "New list…"], unstarDots: ["取消 star…", "Unstar…"],
+  whichLists: ["放进哪些列表", "Put it in which lists"],
+  addN: [n => `把 ${n} 个仓库加入…`, n => `Add ${enRepos(n)} to…`],
+  moveN: [n => `把 ${n} 个仓库移到…`, n => `Move ${enRepos(n)} to…`],
+  alsoMove: [n => `同时把已选的 ${n} 个仓库移到这个列表`, n => `Also move the ${n === 1 ? "selected repository" : `${n} selected repositories`} to this list`],
+  alsoAdd: [n => `同时把已选的 ${n} 个仓库加入这个列表`, n => `Also add the ${n === 1 ? "selected repository" : `${n} selected repositories`} to this list`],
+  nameRequired: ["请填写列表名称。", "Enter a name for the list."],
+  nameTaken: [n => `已经有一个叫${q(n)}的列表了，换个名字吧。`, n => `There is already a list called ${q(n)}. Choose another name.`],
+  savedList: [n => `已保存${q(n)}`, n => `Saved ${q(n)}`],
+  createdWith: [(n, k, moved) => `已新建${q(n)}，并${moved ? "移入" : "加入"} ${k} 个仓库`,
+                (n, k, moved) => `Created ${q(n)} and ${moved ? "moved" : "added"} ${enRepos(k)} ${moved ? "into" : "to"} it`],
+  created: [n => `已新建${q(n)}`, n => `Created ${q(n)}`],
+  confirmDelete: [n => `确认删除${q(n)}？仓库仍保持 star`, n => `Delete ${q(n)}? Its repositories stay starred`],
+  willDelete: [n => `${q(n)}将在应用时删除`, n => `${q(n)} will be deleted when you apply`],
+  deleted: [n => `已删除${q(n)}`, n => `Deleted ${q(n)}`],
+  undeleteClash: [n => `已经有一个叫${q(n)}的列表，先给它改个名再恢复。`, n => `There is already a list called ${q(n)}. Rename it first, then restore this one.`],
+  restored: [n => `已恢复${q(n)}`, n => `Restored ${q(n)}`],
+
+  // preview and apply
+  etaSec: [s => `约 ${s} 秒`, s => `about ${s} s`], etaMin: [m => `约 ${m} 分钟`, m => `about ${m} min`],
+  restoreBackup: ["恢复备份", "Restore a backup"],
+  computing: ["正在读取 GitHub 当前状态并计算差异…", "Reading the current state from GitHub and working out the differences…"],
+  noPreview: ["无法生成预览", "Could not make the preview"],
+  restoreTo: [s => `恢复到 ${s} 的备份`, s => `Restore the backup from ${s}`],
+  confirmTitle: ["确认要写入 GitHub 的修改", "Confirm the changes to write to GitHub"],
+  fixFirst: ["需要先处理这些问题，GitHub 上还没有做任何修改：", "Fix these problems first. Nothing has been changed on GitHub yet:"],
+  sameAsBackup: ["GitHub 上的列表和这个备份完全一致，不需要恢复。", "The lists on GitHub already match this backup; there is nothing to restore."],
+  sameAsDraft: ["GitHub 上已经是这个样子了，不需要修改。", "GitHub already looks like this; there is nothing to change."],
+  sumCreate: [n => `新建 ${n} 个列表`, n => `create ${en(n, "list")}`],
+  sumUpdate: [n => `修改 ${n} 个列表`, n => `edit ${en(n, "list")}`],
+  sumDelete: [n => `删除 ${n} 个列表`, n => `delete ${en(n, "list")}`],
+  sumMembers: [n => `调整 ${n} 个仓库的归属`, n => `change the lists of ${enRepos(n)}`],
+  sumRestar: [n => `重新 star ${n} 个仓库`, n => `re-star ${enRepos(n)}`],
+  sumUnstar: [n => `取消 ${n} 个仓库的 star`, n => `unstar ${enRepos(n)}`],
+  sumAll: [(parts, n, eta) => `${parts.join("，")}。共 ${n} 次写入，${eta}。`,
+           (parts, n, eta) => { const s = parts.join(", "); return `${s[0].toUpperCase()}${s.slice(1)}. ${en(n, "write")} in total, ${eta}.`; }],
+  opCreate: [(n, priv, k) => `新建${q(n)}${priv ? "（私密）" : ""}${k ? `，放入 ${k} 个仓库` : ""}`,
+             (n, priv, k) => `Create ${q(n)}${priv ? " (private)" : ""}${k ? ` with ${enRepos(k)}` : ""}`],
+  opRename: [(a, b) => `把${q(a)}改名为${q(b)}`, (a, b) => `Rename ${q(a)} to ${q(b)}`],
+  opEdit: [n => `修改${q(n)}`, n => `Edit ${q(n)}`],
+  opDesc: [d => `描述改为${q(d)}`, d => `description ${q(d)}`],
+  opClearDesc: ["清空描述", "clear the description"],
+  opPrivate: ["设为私密", "make it private"], opPublic: ["设为公开", "make it public"],
+  opJoin: ["，", ", "],
+  opDelete: [(n, k) => `删除${q(n)}（现有 ${k} 个仓库，仍保持 star）`, (n, k) => `Delete ${q(n)} (${enRepos(k)} now; they stay starred)`],
+  hMembers: [n => `仓库归属（${n}）`, n => `List memberships (${n})`],
+  listRenamed: ["（列表改名）", "(list renamed)"],
+  hRestar: [n => `重新 star（${n}，第一步执行）`, n => `Re-star (${n}, done first)`],
+  hUnstar: [n => `取消 star（${n}，最后一步执行）`, n => `Unstar (${n}, done last)`],
+  confirmUnstar: [n => `我确认取消这 ${n} 个仓库的 star。它们会从所有列表中移除；以后可以从备份恢复，但 star 时间会变成恢复当天。`,
+                  n => `I confirm that ${n === 1 ? "this repository loses its" : `these ${n} repositories lose their`} star. They leave every list; a backup can bring them back later, but the star date becomes the day of the restore.`],
+  noteEmptied: [n => `之后有 ${n} 个仓库不在任何列表中，它们仍保持 star。`, n => n === 1 ? "Afterwards 1 repository is in no list; it stays starred." : `Afterwards ${n} repositories are in no list; they stay starred.`],
+  noteTemp: [n => `为了交换列表名称，${n} 个列表会先临时改名。`, n => `To swap list names, ${en(n, "list")} first get${n === 1 ? "s" : ""} a temporary name.`],
+  deleteFirst: ["先删除旧列表，再新建（如果 GitHub 提示列表数量已达上限，勾选这里再试）",
+                "Delete old lists before creating new ones (tick this and try again if GitHub says you have reached the limit on lists)"],
+  backupNote: ["写入前会自动备份 GitHub 上的当前状态，之后可以在「备份」里一键恢复。",
+               "Before writing, the current state on GitHub is backed up automatically; you can restore it later from “Backups” in one click."],
+  restoreThis: ["恢复到这个备份", "Restore this backup"],
+  applyGitHub: ["应用到 GitHub", "Apply to GitHub"],
+  cantStart: ["没能开始", "Could not start"],
+  restoring: ["正在恢复备份", "Restoring the backup"],
+  applyingGH: ["正在应用到 GitHub", "Applying to GitHub"],
+  preparing: ["准备中…", "Preparing…"],
+  stepOf: [(a, b, c) => `第 ${a}/${b} 步：${c}`, (a, b, c) => `Step ${a}/${b}: ${c}`],
+  detailLog: ["详细记录", "Detailed log"],
+  dontClose: ["写入期间请不要关闭终端窗口。关掉这个页面也没关系，重新打开会继续显示进度。",
+              "Do not close the terminal window while writing. Closing this page is fine: open it again and it shows the progress."],
+  reloadFailed: [m => "已完成，但重新读取失败：" + m, m => "Done, but reading GitHub again failed: " + m],
+  restoredT: ["已恢复", "Restored"], appliedT: ["已应用到 GitHub", "Applied to GitHub"],
+  restoredLead: ["GitHub 上的列表已恢复到备份时的样子。", "The lists on GitHub are back as they were in the backup."],
+  appliedLead: ["GitHub 上的列表现在和你的草稿一致。", "The lists on GitHub now match your draft."],
+  nothingNeeded: ["无需修改。", "Nothing to change."],
+  backupBefore: [f => `修改前的备份：${f}（在「备份」里可以恢复）`, f => `Backup taken before the change: ${f} (restore it from “Backups”)`],
+  backupBeforeShort: [f => `修改前的备份：${f}`, f => `Backup taken before the change: ${f}`],
+  done: ["完成", "Done"],
+  notAllDone: ["没有全部完成", "Not everything was done"],
+  unknownError: ["出现了未知错误。", "An unknown error occurred."],
+  reviewRemaining: ["查看剩余修改", "Review remaining changes"],
+
+  // AI assistant
+  chatExamples: [["把量化、金融相关的仓库都移到 Finance", "FunProjects 太杂了，按主题拆成几个列表",
+                  "哪些仓库还不在任何列表里？帮我归类", "把 EdgeAI 改名为「🔬 EdgeAI & Compression」"],
+                 ["Move the quant and finance repos to Finance", "FunProjects is a mix of everything; split it into a few lists by topic",
+                  "Which repos are not in any list yet? Sort them for me", "Rename EdgeAI to “🔬 EdgeAI & Compression”"]],
+  unavailable: ["（不可用）", " (unavailable)"],
+  checkingAI: ["正在检查 AI 设置…", "Checking the AI setup…"],
+  aiNotReady: ["AI 还不能用：", "The AI is not ready: "],
+  noAIOption: ["没有可用的 AI 选项。", "No AI option is available."],
+  securityNote: ["安全提示：", "Security note: "],
+  chatIntro: ["告诉 AI 你想怎么整理，例如：", "Tell the AI how you want to organise your stars, for example:"],
+  chatDraftOnly: ["AI 的修改只进入草稿，每一步都可以撤销；写入 GitHub 仍需「预览修改」。",
+                  "The AI changes only your draft, and you can undo every step; writing to GitHub still goes through “Preview changes”."],
+  chatArchived: ["之前的对话已存入「历史」，可以随时查看。", "Earlier conversations are kept in “History”."],
+  divider: [s => `新对话 · ${s}`, s => `New chat · ${s}`],
+  thinking: [l => `${l} 正在思考…`, l => `${l} is thinking…`],
+  thinkingSec: [(l, s) => `${l} 正在思考…（${s} 秒）`, (l, s) => `${l} is thinking… (${s} s)`],
+  ctxNew: ["新对话：之前的消息不会发给 AI", "New chat: earlier messages are not sent to the AI"],
+  ctxRecent: [n => `AI 参考本次对话最近 ${n} 条消息`, n => `The AI sees the last ${n === 1 ? "message" : `${n} messages`} of this chat`],
+  ctxOlder: [n => `（更早的 ${n} 条不再参考）`, n => ` (${n} older ${n === 1 ? "one is" : "ones are"} not sent)`],
+  nMsgs: [n => `${n} 条消息`, n => en(n, "message")],
+  nAdded: [n => `加入 ${n}`, n => `${n} added`], nRemoved: [n => `移出 ${n}`, n => `${n} removed`],
+  nUnstar: [n => `取消 star ${n}`, n => `${n} unstarred`], nKeep: [n => `保留 star ${n}`, n => `${n} kept starred`],
+  timeUnknown: ["时间未知", "Unknown time"],
+  histTitle: ["历史记录", "History"],
+  histReadOnly: ["（只读，仅保存在本机浏览器）", "(read-only, kept only in this browser)"],
+  backToChat: ["返回当前对话", "Back to the current chat"],
+  histEmpty: ["还没有存档的对话。应用到 GitHub 或「重新读取」后，当时的对话会存到这里。",
+              "No archived conversations yet. After you apply to GitHub or refresh, the conversation of that time is kept here."],
+  confirmClearAll: ["确认清除？当前对话和全部历史都会删除", "Clear everything? The current chat and all history will be deleted"],
+  clearRecords: ["清除全部记录", "Clear all records"],
+  backToList: ["返回列表", "Back to the list"],
+  clearedAll: ["已清除全部对话记录", "All conversations were cleared"],
+  chgLists: [n => `改动了 ${n} 个列表`, n => `Changed ${en(n, "list")}`],
+  showList: ["查看这个列表", "Show this list"],
+  tagNew: ["新建", "New"], tagRenamed: ["改名", "Renamed"], tagDeleted: ["删除", "Deleted"],
+  wasNamed: [n => `原名${q(n)}`, n => `Was ${q(n)}`],
+  listDeletedNote: ["删除这个列表，其中的仓库仍保持 star", "The list is deleted; its repositories stay starred"],
+  wasUndone: ["当时撤销了这一步", "This step was undone"],
+  wasApplied: ["当时写入了草稿", "This step went into the draft"],
+  stepUndone: ["已撤销这一步", "Step undone"],
+  inDraft: ["已写入草稿（还没有写入 GitHub）", "In the draft (not on GitHub yet)"],
+  undoTurnTitle: ["撤销 AI 这一步对草稿的修改", "Undo this AI step in the draft"],
+  undoTurnBlocked: ["之后草稿又改过；请用顶部的「撤销」逐步撤回", "The draft changed after this step; use “Undo” at the top, one step at a time"],
+  undoTurn: ["撤销这一步", "Undo this step"],
+  turnUndone: ["已撤销 AI 助手的这一步", "Undid the AI assistant's step"],
+  draftNote: [(ops, undone) => `（已改草稿：${ops.join("；")}${undone ? "；随后被撤销" : ""}）`,
+              (ops, undone) => `(changed the draft: ${ops.join("; ")}${undone ? "; later undone" : ""})`],
+  few: [(names, n) => n <= 3 ? names.join("、") : `${names.slice(0, 2).join("、")} 等 ${n} 个仓库`,
+        (names, n) => n <= 3 ? names.join(", ") : `${names.slice(0, 2).join(", ")} and ${n - 2} more`],
+  opsDup: [n => `已经有${q(n)}，没有重复新建`, n => `${q(n)} already exists, so it was not created again`],
+  opsCreated: [n => `新建列表${q(n)}`, n => `Created the list ${q(n)}`],
+  opsUnstar: [w => `标记取消 star：${w}`, w => `Marked to unstar: ${w}`],
+  opsKeep: [w => `保留 star：${w}`, w => `Keep the star: ${w}`],
+  opsGone: ["有一步要操作的列表已经不存在，跳过了", "Skipped a step whose list no longer exists"],
+  opsRenameClash: [n => `已经有叫${q(n)}的列表，没有改名`, n => `A list called ${q(n)} already exists, so nothing was renamed`],
+  opsRenamed: [(a, b) => `把${q(a)}改名为${q(b)}`, (a, b) => `Renamed ${q(a)} to ${q(b)}`],
+  opsDeleted: [n => `删除列表${q(n)}（其中的仓库仍保持 star）`, n => `Deleted the list ${q(n)} (its repositories stay starred)`],
+  opsAdded: [(w, l) => `把 ${w} 加入${q(l)}`, (w, l) => `Added ${w} to ${q(l)}`],
+  opsRemoved: [(w, l) => `把 ${w} 移出${q(l)}`, (w, l) => `Removed ${w} from ${q(l)}`],
+  opsToGone: ["有一步要移入的列表已经不存在，跳过了", "Skipped a step whose target list no longer exists"],
+  opsMoved: [(w, a, b) => `把 ${w} 从${q(a)}移到${q(b)}`, (w, a, b) => `Moved ${w} from ${q(a)} to ${q(b)}`],
+  aiChanged: ["已按你的要求修改了草稿。", "I changed the draft as you asked."],
+  aiNoChange: ["草稿不需要修改。", "The draft needs no change."],
+  aiToast: [n => `AI 助手修改了草稿（${n} 处）`, n => `The AI assistant changed the draft (${en(n, "change")})`],
+
+  // backups, refresh, boot
+  kindExport: ["导出", "Export"], kindPreapply: ["应用前", "Before apply"], kindPrerestore: ["恢复前", "Before restore"],
+  kindBackup: ["备份", "Backup"],
+  readingBackups: ["正在读取备份…", "Reading the backups…"],
+  noBackups: ["还没有备份。第一次应用修改时会自动创建。", "No backups yet. One is made automatically the first time you apply changes."],
+  snapInfo: [(l, s) => `　${l} 个列表，${s} 个 star`, (l, s) => ` · ${en(l, "list")}, ${en(s, "star")}`],
+  previewRestore: ["预览恢复", "Preview restore"],
+  discarded: ["已放弃全部修改", "All changes were discarded"],
+  reading: ["正在读取…", "Reading…"],
+  refreshed: ["已从 GitHub 重新读取", "Read again from GitHub"],
+  readFailed: [m => "读取失败：" + m, m => "Could not read GitHub: " + m],
+  needLink: ["请用启动时终端里显示的完整链接打开这个页面（链接末尾带有 #t=…）。",
+             "Open this page with the full link shown in the terminal at start-up (it ends with #t=…)."],
+  restoredDraft: [n => `已恢复上次未应用的 ${n} 处修改`, n => `Restored ${en(n, "unapplied change")} from last time`],
+};
+function t(key, ...args) {
+  const pair = STR[key];
+  if (!pair) { console.warn("missing string:", key); return key; }
+  const v = pair[LANG === "zh" ? 0 : 1];
+  return typeof v === "function" ? v(...args) : v;
+}
+// Fill the static parts of the page: data-i18n (text), -title, -placeholder, -aria (aria-label).
+function applyStatic() {
+  document.documentElement.lang = LANG === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  for (const [attr, key] of [["title", "i18nTitle"], ["placeholder", "i18nPlaceholder"], ["aria-label", "i18nAria"]]) {
+    document.querySelectorAll(`[data-${key.replace(/[A-Z]/g, c => "-" + c.toLowerCase())}]`)
+      .forEach(el => el.setAttribute(attr, t(el.dataset[key])));
+  }
+  $("#uiLang").value = LANG;
+}
+// The macOS app (if the page runs inside it) switches its menus to the same language.
+function tellApp() {
+  try { window.webkit.messageHandlers.starshelf.postMessage({ lang: LANG }); } catch (_) {}
+}
+applyStatic();
+tellApp();
+
 const isTyping = () => { const a = document.activeElement; return a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT") && a.type !== "checkbox"; };
 
 async function api(method, path, body) {
-  const opts = { method, headers: { "X-Session": TOKEN } };
+  const opts = { method, headers: { "X-Session": TOKEN, "X-Lang": LANG } };
   if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
   const res = await fetch(path, opts);
   let data = null;
   try { data = await res.json(); } catch (_) {}
-  if (!res.ok) throw new Error((data && data.error) || `请求失败（HTTP ${res.status}）`);
+  if (!res.ok) throw new Error((data && data.error) || t("httpFail", res.status));
   return data;
 }
 
@@ -737,41 +1068,41 @@ function undo() {
   if (!S.undo.length) return;
   S.redo.push(snapState());
   loadState(S.undo.pop());
-  afterEdit(); toast("已撤销", false);
+  afterEdit(); toast(t("undone"), false);
 }
 function redo() {
   if (!S.redo.length) return;
   S.undo.push(snapState());
   loadState(S.redo.pop());
-  afterEdit(); toast("已重做", false);
+  afterEdit(); toast(t("redone"), false);
 }
 const addRaw = (key, ids) => { const l = findList(key); ids.forEach(id => { l.items.add(id); S.unstar.delete(id); }); };
 const removeRaw = (key, ids) => { const l = findList(key); ids.forEach(id => l.items.delete(id)); };
 const clearRaw = ids => alive().forEach(l => ids.forEach(id => l.items.delete(id)));
-const plural = ids => ids.length === 1 ? (S.repos.get(ids[0]) || {}).full_name : `${ids.length} 个仓库`;
+const plural = ids => ids.length === 1 ? (S.repos.get(ids[0]) || {}).full_name : t("nRepos", ids.length);
 
 function doAdd(key, ids) {
   const l = findList(key);
-  if (commit(() => addRaw(key, ids))) toast(`已把 ${plural(ids)} 加入「${l.name}」`);
-  else toast(`${plural(ids)} 已经在「${l.name}」里`, false);
+  if (commit(() => addRaw(key, ids))) toast(t("added", plural(ids), l.name));
+  else toast(t("alreadyIn", plural(ids), l.name), false);
 }
 function doRemove(key, ids) {
   const l = findList(key);
-  if (commit(() => removeRaw(key, ids))) { toast(`已把 ${plural(ids)} 移出「${l.name}」`); }
+  if (commit(() => removeRaw(key, ids))) { toast(t("removed", plural(ids), l.name)); }
 }
 function doMove(from, to, ids) {
   const a = findList(from), b = findList(to);
-  if (commit(() => { removeRaw(from, ids); addRaw(to, ids); })) toast(`已把 ${plural(ids)} 从「${a.name}」移到「${b.name}」`);
+  if (commit(() => { removeRaw(from, ids); addRaw(to, ids); })) toast(t("moved", plural(ids), a.name, b.name));
 }
 function doClear(ids) {
-  if (commit(() => clearRaw(ids))) toast(`已把 ${plural(ids)} 移出所有列表`);
+  if (commit(() => clearRaw(ids))) toast(t("cleared", plural(ids)));
 }
 // Unstar is a draft mark: the repo leaves every list now, and its star goes only when applied.
 function doUnstar(ids) {
   ids = ids.filter(id => S.repos.get(id).starred && !S.unstar.has(id));
   if (!ids.length) return;
   if (commit(() => { clearRaw(ids); ids.forEach(id => S.unstar.add(id)); })) {
-    toast(`已标记 ${plural(ids)} 取消 star（应用到 GitHub 时才会执行）`);
+    toast(t("markedUnstar", plural(ids)));
   }
 }
 function doKeepStar(ids) {
@@ -781,7 +1112,7 @@ function doKeepStar(ids) {
     S.unstar.delete(id);
     for (const l of alive()) { const b = S.base.get(l.key); if (b && b.items.has(id)) l.items.add(id); }
   }));
-  toast(`${plural(ids)} 会保留 star`);
+  toast(t("keepsStar", plural(ids)));
 }
 
 // ------------------------------------------------------------------ saving
@@ -791,8 +1122,14 @@ function draftBody() {
   const dirty = summary().total > 0 || S.lists.some(l => !l.id);
   return { dirty, body: { draft: dirty ? { fetched_at: S.fetchedAt, newSeq: S.newSeq, lists: serializeLists(), unstar: [...S.unstar] } : null } };
 }
+// The note next to the buttons; kept as a string key so a language switch can redraw it.
+const SAVE_NOTE = { key: "", arg: "" };
+function saveNote(key, arg) {
+  Object.assign(SAVE_NOTE, { key: key || "", arg: arg || "" });
+  $("#saveState").textContent = key ? t(key, arg) : "";
+}
 function scheduleSave() {
-  $("#saveState").textContent = "正在保存草稿…";
+  saveNote("saving");
   if (SAVE.busy) { SAVE.again = true; return; }
   saveDraft();
 }
@@ -801,9 +1138,9 @@ async function saveDraft() {
   const { dirty, body } = draftBody();
   try {
     await api("PUT", "/api/draft", body);
-    if (!SAVE.again) $("#saveState").textContent = dirty ? "草稿已自动保存" : "";
+    if (!SAVE.again) saveNote(dirty ? "saved" : "");
   } catch (err) {
-    $("#saveState").textContent = "草稿保存失败：" + err.message;
+    saveNote("saveFailed", err.message);
   } finally {
     SAVE.busy = false;
     if (SAVE.again) saveDraft();
@@ -813,7 +1150,7 @@ function flushOnExit() {
   if (!SAVE.busy && !SAVE.again) return;
   try {
     fetch("/api/draft", { method: "PUT", keepalive: true, body: JSON.stringify(draftBody().body),
-      headers: { "X-Session": TOKEN, "Content-Type": "application/json" } });
+      headers: { "X-Session": TOKEN, "X-Lang": LANG, "Content-Type": "application/json" } });
   } catch (_) {}
 }
 window.addEventListener("pagehide", flushOnExit);
@@ -825,22 +1162,22 @@ function render() { renderTop(); renderSide(); renderMain(); }
 function renderTop() {
   const s = summary();
   $("#login").textContent = "@" + S.login;
-  $("#synced").textContent = "读取于 " + fmtTime(S.fetchedAt);
+  $("#synced").textContent = t("readAt", fmtTime(S.fetchedAt));
   $("#btnUndo").disabled = !S.undo.length;
   $("#btnRedo").disabled = !S.redo.length;
   $("#btnDiscard").disabled = s.total === 0;
   const running = S.job && S.job.status === "running";
   const refresh = $("#btnRefresh");
   refresh.disabled = s.total > 0 || running;
-  refresh.title = s.total > 0 ? "有未应用的修改时不能重新读取。请先应用或放弃修改。" : "从 GitHub 读取最新的 star 和列表";
+  refresh.title = s.total > 0 ? t("refreshBlocked") : t("refreshTitle");
   const review = $("#btnReview");
   review.replaceChildren();
   if (running) {
     review.disabled = false;
-    review.append(S.job.total ? `正在应用 ${S.job.step}/${S.job.total}` : "正在应用…");
+    review.append(S.job.total ? t("applyingStep", S.job.step, S.job.total) : t("applying"));
   } else {
     review.disabled = s.total === 0;
-    review.append("预览修改", h("span", { class: "count", id: "changeCount" }, s.total));
+    review.append(t("preview"), h("span", { class: "count", id: "changeCount" }, s.total));
   }
 }
 
@@ -853,7 +1190,7 @@ function renderSide() {
   document.querySelectorAll(".vbtn").forEach(b => b.classList.toggle("on", b.dataset.view === S.view));
   const ul = $("#lists");
   ul.replaceChildren();
-  if (!S.lists.length) ul.append(h("li", { class: "empty-side" }, "还没有列表。点「新建列表」开始。"));
+  if (!S.lists.length) ul.append(h("li", { class: "empty-side" }, t("noLists")));
   for (const l of S.lists) {
     const isNew = !l.id, renamed = l.id && S.base.get(l.key).name !== l.name;
     const li = h("li", {
@@ -863,14 +1200,14 @@ function renderSide() {
       h("button", { class: "lbtn", dataset: { act: "view", key: l.key }, title: l.description || l.name },
         star(colorOf(l)),
         h("span", { class: "lname" }, l.name),
-        isNew && !l.deleted ? h("span", { class: "badge" }, "新建") : null,
-        renamed && !l.deleted ? h("span", { class: "badge", title: "原名：" + S.base.get(l.key).name }, "改名") : null,
-        l.deleted ? h("span", { class: "badge del" }, "将删除") : null,
-        !isNew && !l.deleted && listTouched(l) && !renamed ? h("span", { class: "flag", title: "有改动" }) : null,
+        isNew && !l.deleted ? h("span", { class: "badge" }, t("badgeNew")) : null,
+        renamed && !l.deleted ? h("span", { class: "badge", title: t("oldName", S.base.get(l.key).name) }, t("badgeRenamed")) : null,
+        l.deleted ? h("span", { class: "badge del" }, t("badgeDelete")) : null,
+        !isNew && !l.deleted && listTouched(l) && !renamed ? h("span", { class: "flag", title: t("hasChanges") }) : null,
         h("span", { class: "n" }, l.items.size)),
       l.deleted
-        ? h("button", { class: "ghost edit", dataset: { act: "undelete", key: l.key } }, "恢复")
-        : h("button", { class: "ghost edit", dataset: { act: "edit", key: l.key }, "aria-label": `编辑「${l.name}」` }, "编辑"));
+        ? h("button", { class: "ghost edit", dataset: { act: "undelete", key: l.key } }, t("restore"))
+        : h("button", { class: "ghost edit", dataset: { act: "edit", key: l.key }, "aria-label": t("editNamed", l.name) }, t("edit")));
     ul.append(li);
   }
 }
@@ -892,7 +1229,7 @@ function filtered() {
   const words = S.q.toLowerCase().split(/\s+/).filter(Boolean);
   let ids = viewIds().filter(id => {
     const r = S.repos.get(id);
-    if (S.lang && (r.language || "其他") !== S.lang) return false;
+    if (S.lang && (r.language || OTHER) !== S.lang) return false;
     if (S.changedOnly && !repoDiff(id).changed) return false;
     if (!words.length) return true;
     const hay = (r.full_name + " " + (r.description || "")).toLowerCase();
@@ -914,26 +1251,25 @@ function renderMain() {
   title.replaceChildren(); banner.hidden = true; banner.replaceChildren();
   $("#btnEditList").hidden = !l || l.deleted;
   if (S.view === "all") {
-    title.append("全部 star");
-    desc.textContent = "你 star 过的所有仓库。勾选后批量加入列表，或直接拖到左边的列表上。";
+    title.append(t("allStars"));
+    desc.textContent = t("allDesc");
   } else if (S.view === "none") {
-    title.append("不在任何列表");
-    desc.textContent = "这些仓库已经 star，但还没有归入任何列表。";
+    title.append(t("noList"));
+    desc.textContent = t("noneDesc");
   } else if (S.view === "unstar") {
-    title.append("将取消 star");
-    desc.textContent = "应用到 GitHub 时，这些仓库会先移出所有列表，最后一步才取消 star。点「保留 star」可以撤回。";
+    title.append(t("toUnstar"));
+    desc.textContent = t("unstarDesc");
     banner.hidden = false;
-    banner.append(h("span", { id: "unstarPending" }, h("b", {}, "还没有写入 GitHub。"),
-      `这 ${S.unstar.size} 个仓库现在仍然有 star，这里只是草稿里的标记。点「预览修改」，勾选确认，再点「应用到 GitHub」，才会真正取消。`),
-      h("button", { onclick: () => openReview(null) }, "预览修改"));
+    banner.append(h("span", { id: "unstarPending" }, h("b", {}, t("notYet")), t("unstarPending", S.unstar.size)),
+      h("button", { onclick: () => openReview(null) }, t("preview")));
   } else if (l) {
     title.append(star(colorOf(l)), l.name);
-    if (l.private) title.append(h("span", { class: "tag" }, "私密"));
-    desc.textContent = l.description || "没有描述";
+    if (l.private) title.append(h("span", { class: "tag" }, t("private")));
+    desc.textContent = l.description || t("noDesc");
     if (l.deleted) {
       banner.hidden = false;
-      banner.append(h("span", {}, "这个列表会在应用时删除，其中的仓库仍保持 star。"),
-        h("button", { onclick: () => undelete(l.key) }, "恢复这个列表"));
+      banner.append(h("span", {}, t("listDoomed")),
+        h("button", { onclick: () => undelete(l.key) }, t("restoreList")));
     }
   }
   const ids = filtered();
@@ -953,11 +1289,11 @@ function renderMain() {
 
 function emptyState() {
   let msg;
-  if (S.q || S.lang || S.changedOnly) msg = "没有符合当前筛选条件的仓库。清空搜索或筛选后再看看。";
-  else if (S.view === "none") msg = "所有 star 都已经归入列表了。";
-  else if (S.view === "unstar") msg = "没有要取消 star 的仓库。";
-  else if (S.view === "all") msg = "你还没有 star 任何仓库。";
-  else msg = "这个列表还是空的。在「全部 star」里勾选仓库后点「加入列表…」，或者直接把仓库拖到左边的这个列表上。";
+  if (S.q || S.lang || S.changedOnly) msg = t("emptyFiltered");
+  else if (S.view === "none") msg = t("emptyNone");
+  else if (S.view === "unstar") msg = t("emptyUnstar");
+  else if (S.view === "all") msg = t("emptyAll");
+  else msg = t("emptyList");
   return h("div", { class: "empty" }, star(), h("p", {}, msg));
 }
 
@@ -971,22 +1307,22 @@ function rowEl(id, l) {
     class: "row" + (d.changed ? " changed" : "") + (S.sel.has(id) ? " sel" : "") + (gone ? " gone" : "") + (leaving ? " unstarring" : ""),
     dataset: { id }, draggable: "true",
   },
-    h("input", { type: "checkbox", dataset: { act: "pick" }, "aria-label": "选择 " + r.full_name, checked: S.sel.has(id) }),
+    h("input", { type: "checkbox", dataset: { act: "pick" }, "aria-label": t("selectRepo", r.full_name), checked: S.sel.has(id) }),
     h("div", { class: "what" },
       h("a", { class: "name", href: r.url, target: "_blank", rel: "noopener noreferrer", draggable: "false" },
         h("span", { class: "owner" }, owner + "/"), h("span", { class: "repo" }, rest.join("/"))),
-      r.archived ? h("span", { class: "tag" }, "已归档") : null,
-      !r.starred ? h("span", { class: "tag" }, "未 star") : null,
-      leaving ? h("span", { class: "tag del" }, "将取消 star") : null,
+      r.archived ? h("span", { class: "tag" }, t("archived")) : null,
+      !r.starred ? h("span", { class: "tag" }, t("notStarred")) : null,
+      leaving ? h("span", { class: "tag del" }, t("willUnstar")) : null,
       r.description ? h("p", { class: "desc", title: r.description }, r.description) : null,
-      gone && !leaving ? h("p", { class: "gone-note" }, `已从「${l.name}」移出`,
-        h("button", { class: "link", dataset: { act: "restore-here" } }, "撤销")) : null,
-      leaving ? h("p", { class: "unstar-note" }, "应用时会移出所有列表并取消 star",
-        h("button", { class: "link", dataset: { act: "keep-star" } }, "保留 star")) : null),
+      gone && !leaving ? h("p", { class: "gone-note" }, t("removedFrom", l.name),
+        h("button", { class: "link", dataset: { act: "restore-here" } }, t("undo"))) : null,
+      leaving ? h("p", { class: "unstar-note" }, t("unstarNote"),
+        h("button", { class: "link", dataset: { act: "keep-star" } }, t("keepStar"))) : null),
     h("div", { class: "meta" },
       h("span", { class: "stars" }, "★ " + fmtNum(r.stars)),
       r.language ? h("span", {}, r.language) : null,
-      r.pushed_at ? h("span", { title: "最近一次推送" }, "更新于 " + r.pushed_at.slice(0, 10)) : null),
+      r.pushed_at ? h("span", { title: t("lastPush") }, t("updated", r.pushed_at.slice(0, 10))) : null),
     chipsEl(id));
   return row;
 }
@@ -999,16 +1335,16 @@ function chipsEl(id) {
     const now = !l.deleted && l.items.has(id);
     const style = `--c:${colorOf(l)}`;
     if (now) {
-      box.append(h("span", { class: "chip" + (was ? "" : " added"), style, title: was ? l.name : `新加入「${l.name}」` },
+      box.append(h("span", { class: "chip" + (was ? "" : " added"), style, title: was ? l.name : t("chipAdded", l.name) },
         h("button", { class: "cn", dataset: { act: "goto", key: l.key } }, l.name),
-        h("button", { class: "x", dataset: { act: "chip-remove", key: l.key }, "aria-label": `移出「${l.name}」` }, "×")));
+        h("button", { class: "x", dataset: { act: "chip-remove", key: l.key }, "aria-label": t("removeFrom", l.name) }, "×")));
     } else if (was && l.deleted) {
-      box.append(h("span", { class: "chip doomed", style, title: `「${l.name}」将被删除` }, l.name));
+      box.append(h("span", { class: "chip doomed", style, title: t("chipDoomed", l.name) }, l.name));
     } else if (was) {
-      box.append(h("button", { class: "chip removed", style, dataset: { act: "chip-restore", key: l.key }, title: `已移出「${l.name}」，点击撤销` }, l.name));
+      box.append(h("button", { class: "chip removed", style, dataset: { act: "chip-restore", key: l.key }, title: t("chipRemoved", l.name) }, l.name));
     }
   }
-  box.append(h("button", { class: "chip-add", dataset: { act: "pick-lists" }, "aria-label": "加入或移出列表", title: "加入或移出列表" }, "+"));
+  box.append(h("button", { class: "chip-add", dataset: { act: "pick-lists" }, "aria-label": t("addOrRemove"), title: t("addOrRemove") }, "+"));
   return box;
 }
 
@@ -1027,22 +1363,23 @@ function renderSelection() {
   $("#listhead").classList.toggle("has-sel", n > 0);
   $("#acts").hidden = n === 0;
   const total = viewIds().length;
-  $("#countLabel").textContent = n ? `已选 ${n} 个` : (vis.length === total ? `${total} 个仓库` : `显示 ${vis.length} 个，共 ${total} 个`);
+  $("#countLabel").textContent = n ? t("nSelected", n) : (vis.length === total ? t("nRepos", total) : t("showing", vis.length, total));
   const l = viewList();
   $("#bMove").hidden = !l || l.deleted;
   $("#bRemove").hidden = !l || l.deleted;
-  if (l) $("#bRemove").textContent = `移出「${l.name}」`;
+  if (l) $("#bRemove").textContent = t("removeFrom", l.name);
   $("#bClear").hidden = ![...S.sel].some(inAny);
   $("#bUnstar").hidden = ![...S.sel].some(id => S.repos.get(id).starred && !S.unstar.has(id));
   $("#bKeep").hidden = ![...S.sel].some(id => S.unstar.has(id));
 }
 
+const OTHER = "\u0000other";   // filter value for repos without a language
 function fillLanguages() {
   const counts = new Map();
-  for (const r of S.repos.values()) { const k = r.language || "其他"; counts.set(k, (counts.get(k) || 0) + 1); }
+  for (const r of S.repos.values()) { const k = r.language || OTHER; counts.set(k, (counts.get(k) || 0) + 1); }
   const sel = $("#lang");
-  sel.replaceChildren(h("option", { value: "" }, "全部语言"),
-    [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => h("option", { value: k }, `${k}（${n}）`)));
+  sel.replaceChildren(h("option", { value: "" }, t("allLangs")),
+    [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => h("option", { value: k }, t("langCount", k === OTHER ? t("otherLang") : k, n))));
   if (S.lang && !counts.has(S.lang)) S.lang = "";
   sel.value = S.lang;
 }
@@ -1078,13 +1415,13 @@ function openPicker(anchor, cfg) {
   closePopover();
   pop = { anchor, ...cfg };
   const box = $("#popover");
-  const filter = h("input", { type: "search", placeholder: "查找列表", "aria-label": "查找列表" });
+  const filter = h("input", { type: "search", placeholder: t("findList"), "aria-label": t("findList") });
   const opts = h("div", { class: "opts", role: "listbox" });
   const fill = () => {
     opts.replaceChildren();
     const q = filter.value.trim().toLowerCase();
     const lists = alive().filter(l => !(cfg.mode === "move" && l.key === S.view) && (!q || l.name.toLowerCase().includes(q)));
-    if (!lists.length) opts.append(h("p", { class: "empty-side" }, q ? "没有匹配的列表" : "还没有其他列表"));
+    if (!lists.length) opts.append(h("p", { class: "empty-side" }, q ? t("noMatch") : t("noOther")));
     for (const l of lists) {
       const inside = cfg.ids.every(id => l.items.has(id));
       opts.append(h("button", { class: "opt", dataset: { key: l.key }, role: "option", "aria-selected": cfg.mode === "toggle" ? String(inside) : null },
@@ -1119,11 +1456,11 @@ function openPicker(anchor, cfg) {
   const create = h("button", { class: "opt", onclick: () => {
     const c = { ...cfg }; closePopover();
     openListDialog(null, { ids: c.ids, moveFrom: c.mode === "move" ? S.view : null });
-  } }, h("span", { class: "sign" }, "+"), "新建列表…");
+  } }, h("span", { class: "sign" }, "+"), t("newListDots"));
   const one = cfg.mode === "toggle" ? cfg.ids[0] : null;
   const starBtn = one && S.repos.get(one).starred ? (S.unstar.has(one)
-    ? h("button", { class: "opt", onclick: () => { closePopover(); doKeepStar([one]); } }, h("span", { class: "sign" }, "★"), "保留 star")
-    : h("button", { class: "opt danger", onclick: () => { closePopover(); doUnstar([one]); } }, h("span", { class: "sign" }, "✕"), "取消 star…"))
+    ? h("button", { class: "opt", onclick: () => { closePopover(); doKeepStar([one]); } }, h("span", { class: "sign" }, "★"), t("keepStar"))
+    : h("button", { class: "opt danger", onclick: () => { closePopover(); doUnstar([one]); } }, h("span", { class: "sign" }, "✕"), t("unstarDots")))
     : null;
   box.replaceChildren(h("div", { class: "ph" }, cfg.title), filter, opts, h("div", { class: "pf" }, create, starBtn));
   fill();
@@ -1144,20 +1481,18 @@ const LD = { key: null, ids: [], moveFrom: null, confirmDelete: false };
 function openListDialog(key, opts = {}) {
   const l = key ? findList(key) : null;
   Object.assign(LD, { key, ids: opts.ids || [], moveFrom: opts.moveFrom || null, confirmDelete: false });
-  $("#ldTitle").textContent = l ? "编辑列表" : "新建列表";
-  $("#ldSave").textContent = l ? "保存" : "创建";
+  $("#ldTitle").textContent = l ? t("editList") : t("newList");
+  $("#ldSave").textContent = l ? t("save") : t("create");
   $("#ldName").value = l ? l.name : "";
   $("#ldDesc").value = l ? l.description : "";
   document.querySelector(`input[name=vis][value=${l && l.private ? "private" : "public"}]`).checked = true;
   $("#ldErr").hidden = true;
   const del = $("#ldDelete");
-  del.hidden = !l; del.textContent = "删除列表";
+  del.hidden = !l; del.textContent = t("deleteList");
   const withWrap = $("#ldWithWrap");
   withWrap.hidden = !!l || !LD.ids.length;
   $("#ldWith").checked = true;
-  $("#ldWithText").textContent = LD.moveFrom
-    ? `同时把已选的 ${LD.ids.length} 个仓库移到这个列表`
-    : `同时把已选的 ${LD.ids.length} 个仓库加入这个列表`;
+  $("#ldWithText").textContent = LD.moveFrom ? t("alsoMove", LD.ids.length) : t("alsoAdd", LD.ids.length);
   $("#listDialog").showModal();
   $("#ldName").focus(); $("#ldName").select();
 }
@@ -1167,15 +1502,15 @@ $("#listForm").addEventListener("submit", e => {
   const description = $("#ldDesc").value.trim();
   const priv = document.querySelector("input[name=vis]:checked").value === "private";
   const err = $("#ldErr");
-  if (!name) { err.textContent = "请填写列表名称。"; err.hidden = false; $("#ldName").focus(); return; }
+  if (!name) { err.textContent = t("nameRequired"); err.hidden = false; $("#ldName").focus(); return; }
   const clash = alive().find(x => x.key !== LD.key && x.name.toLowerCase() === name.toLowerCase());
-  if (clash) { err.textContent = `已经有一个叫「${clash.name}」的列表了，换个名字吧。`; err.hidden = false; $("#ldName").focus(); return; }
+  if (clash) { err.textContent = t("nameTaken", clash.name); err.hidden = false; $("#ldName").focus(); return; }
   if (LD.key) {
     const l = findList(LD.key);
     commit(() => { l.name = name; l.description = description; l.private = priv; });
     rememberColor(l);
     $("#listDialog").close();
-    toast(`已保存「${name}」`);
+    toast(t("savedList", name));
   } else {
     const key = `new-${S.newSeq++}`;
     const ids = $("#ldWith").checked ? LD.ids : [];
@@ -1188,7 +1523,7 @@ $("#listForm").addEventListener("submit", e => {
     rememberColor({ id: null, name, color });
     $("#listDialog").close();
     if (from && ids.length) { S.sel.clear(); renderSelection(); }
-    toast(ids.length ? `已新建「${name}」，并${from ? "移入" : "加入"} ${ids.length} 个仓库` : `已新建「${name}」`);
+    toast(ids.length ? t("createdWith", name, ids.length, !!from) : t("created", name));
   }
 });
 $("#ldCancel").addEventListener("click", () => $("#listDialog").close());
@@ -1196,7 +1531,7 @@ $("#ldDelete").addEventListener("click", () => {
   const l = findList(LD.key);
   if (!LD.confirmDelete) {
     LD.confirmDelete = true;
-    $("#ldDelete").textContent = `确认删除「${l.name}」？仓库仍保持 star`;
+    $("#ldDelete").textContent = t("confirmDelete", l.name);
     return;
   }
   $("#listDialog").close();
@@ -1210,17 +1545,17 @@ function deleteList(key) {
   });
   if (!findList(S.view)) S.view = S.view === key ? "all" : S.view;
   render();
-  toast(l.id ? `「${l.name}」将在应用时删除` : `已删除「${l.name}」`);
+  toast(l.id ? t("willDelete", l.name) : t("deleted", l.name));
 }
 function undelete(key) {
   const l = findList(key);
   const clash = alive().find(x => x.name.toLowerCase() === l.name.toLowerCase());
-  if (clash) { toast(`已经有一个叫「${clash.name}」的列表，先给它改个名再恢复。`, false); return; }
-  if (commit(() => { l.deleted = false; })) toast(`已恢复「${l.name}」`);
+  if (clash) { toast(t("undeleteClash", clash.name), false); return; }
+  if (commit(() => { l.deleted = false; })) toast(t("restored", l.name));
 }
 
 // ------------------------------------------------------------------ review & apply
-function eta(n) { const s = Math.ceil(n * 1.6); return s < 90 ? `约 ${s} 秒` : `约 ${Math.round(s / 60)} 分钟`; }
+function eta(n) { const s = Math.ceil(n * 1.6); return s < 90 ? t("etaSec", s) : t("etaMin", Math.round(s / 60)); }
 const layoutLists = () => alive().map(l => ({ id: l.id, name: l.name.trim(), description: l.description, private: l.private, items: [...l.items] }));
 
 async function openReview(restore) {
@@ -1228,9 +1563,9 @@ async function openReview(restore) {
   $("#toast").hidden = true;
   const dlg = $("#reviewDialog");
   if (!dlg.open) dlg.showModal();
-  $("#rvBody").replaceChildren(h("h2", {}, restore ? "恢复备份" : "预览修改"),
-    h("p", { class: "lead" }, "正在读取 GitHub 当前状态并计算差异…"), h("div", { class: "bar indet" }, h("i")));
-  $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "取消"));
+  $("#rvBody").replaceChildren(h("h2", {}, restore ? t("restoreBackup") : t("preview")),
+    h("p", { class: "lead" }, t("computing")), h("div", { class: "bar indet" }, h("i")));
+  $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, t("cancel")));
   try {
     const body = restore ? { restore: restore.file } : { lists: layoutLists(), unstar: [...S.unstar] };
     const plan = await api("POST", "/api/plan", body);
@@ -1238,84 +1573,84 @@ async function openReview(restore) {
     S.review.plan = plan;
     renderPlan(plan);
   } catch (err) {
-    $("#rvBody").replaceChildren(h("h2", {}, "无法生成预览"), h("p", { class: "errtext" }, err.message));
+    $("#rvBody").replaceChildren(h("h2", {}, t("noPreview")), h("p", { class: "errtext" }, err.message));
   }
 }
 
 function renderPlan(p) {
   const restore = S.review.restore, body = $("#rvBody"), acts = $("#rvActions"), dlg = $("#reviewDialog");
-  body.replaceChildren(h("h2", {}, restore ? `恢复到 ${fmtTime(restore.fetched_at)} 的备份` : "确认要写入 GitHub 的修改"));
+  body.replaceChildren(h("h2", {}, restore ? t("restoreTo", fmtTime(restore.fetched_at)) : t("confirmTitle")));
   if (p.errors.length) {
-    body.append(h("div", { class: "errors" }, h("b", {}, "需要先处理这些问题，GitHub 上还没有做任何修改："),
+    body.append(h("div", { class: "errors" }, h("b", {}, t("fixFirst")),
       h("ul", {}, p.errors.map(e => h("li", {}, e)))));
   }
   if (!p.errors.length && p.n_ops === 0) {
-    body.append(h("p", { class: "lead" }, restore ? "GitHub 上的列表和这个备份完全一致，不需要恢复。" : "GitHub 上已经是这个样子了，不需要修改。"));
-    acts.replaceChildren(h("span", { class: "spacer" }), h("button", { class: "primary", onclick: () => dlg.close() }, "关闭"));
+    body.append(h("p", { class: "lead" }, restore ? t("sameAsBackup") : t("sameAsDraft")));
+    acts.replaceChildren(h("span", { class: "spacer" }), h("button", { class: "primary", onclick: () => dlg.close() }, t("close")));
     return;
   }
   const parts = [];
-  if (p.creates.length) parts.push(`新建 ${p.creates.length} 个列表`);
-  if (p.updates.length) parts.push(`修改 ${p.updates.length} 个列表`);
-  if (p.deletes.length) parts.push(`删除 ${p.deletes.length} 个列表`);
-  if (p.memberships.length) parts.push(`调整 ${p.memberships.length} 个仓库的归属`);
-  if (p.restars.length) parts.push(`重新 star ${p.restars.length} 个仓库`);
-  if (p.unstars.length) parts.push(`取消 ${p.unstars.length} 个仓库的 star`);
-  if (parts.length) body.append(h("p", { class: "lead" }, parts.join("，") + `。共 ${p.n_ops} 次写入，${eta(p.n_ops)}。`));
+  if (p.creates.length) parts.push(t("sumCreate", p.creates.length));
+  if (p.updates.length) parts.push(t("sumUpdate", p.updates.length));
+  if (p.deletes.length) parts.push(t("sumDelete", p.deletes.length));
+  if (p.memberships.length) parts.push(t("sumMembers", p.memberships.length));
+  if (p.restars.length) parts.push(t("sumRestar", p.restars.length));
+  if (p.unstars.length) parts.push(t("sumUnstar", p.unstars.length));
+  if (parts.length) body.append(h("p", { class: "lead" }, t("sumAll", parts, p.n_ops, eta(p.n_ops))));
 
   const ops = [];
   for (const c of p.creates) ops.push(h("li", { class: "op add" }, h("span", { class: "sign" }, "+"),
-    h("span", {}, `新建「${c.name}」${c.private ? "（私密）" : ""}${c.repos ? `，放入 ${c.repos} 个仓库` : ""}`)));
+    h("span", {}, t("opCreate", c.name, c.private, c.repos))));
   for (const u of p.updates) {
     const a = u.after, b = u.before, bits = [];
-    bits.push(a.name !== b.name ? `把「${b.name}」改名为「${a.name}」` : `修改「${a.name}」`);
-    if (a.description !== b.description) bits.push(a.description ? `描述改为「${a.description}」` : "清空描述");
-    if (a.isPrivate !== b.isPrivate) bits.push(a.isPrivate ? "设为私密" : "设为公开");
-    ops.push(h("li", { class: "op edit" }, h("span", { class: "sign" }, "~"), h("span", {}, bits.join("，"))));
+    bits.push(a.name !== b.name ? t("opRename", b.name, a.name) : t("opEdit", a.name));
+    if (a.description !== b.description) bits.push(a.description ? t("opDesc", a.description) : t("opClearDesc"));
+    if (a.isPrivate !== b.isPrivate) bits.push(a.isPrivate ? t("opPrivate") : t("opPublic"));
+    ops.push(h("li", { class: "op edit" }, h("span", { class: "sign" }, "~"), h("span", {}, bits.join(t("opJoin")))));
   }
   for (const d of p.deletes) ops.push(h("li", { class: "op del" }, h("span", { class: "sign" }, "−"),
-    h("span", {}, `删除「${d.name}」（现有 ${d.repos} 个仓库，仍保持 star）`)));
-  if (ops.length) body.append(h("h3", {}, "列表"), h("ul", { class: "ops" }, ops));
+    h("span", {}, t("opDelete", d.name, d.repos))));
+  if (ops.length) body.append(h("h3", {}, t("lists")), h("ul", { class: "ops" }, ops));
 
   if (p.memberships.length) {
-    body.append(h("h3", {}, `仓库归属（${p.memberships.length}）`));
+    body.append(h("h3", {}, t("hMembers", p.memberships.length)));
     body.append(h("div", { class: "ptable" }, p.memberships.map(m => h("div", { class: "prow" },
       h("span", { class: "prepo" }, m.repo),
       h("span", { class: "pchg" },
         m.added.map(n => h("span", { class: "pc add" }, "+ " + n)),
         m.removed.map(n => h("span", { class: "pc del" }, "− " + n)),
         m.kept.map(n => h("span", { class: "pc keep" }, n)),
-        (!m.added.length && !m.removed.length) ? h("span", { class: "pc keep" }, "（列表改名）") : null)))));
+        (!m.added.length && !m.removed.length) ? h("span", { class: "pc keep" }, t("listRenamed")) : null)))));
   }
   if (p.restars.length) {
-    body.append(h("h3", {}, `重新 star（${p.restars.length}，第一步执行）`),
+    body.append(h("h3", {}, t("hRestar", p.restars.length)),
       h("div", { class: "ptable" }, p.restars.map(n => h("div", { class: "prow" }, h("span", { class: "prepo" }, n),
         h("span", { class: "pchg" }, h("span", { class: "pc add" }, "+ star"))))));
   }
   let unstarOk = null;
   if (p.unstars.length) {
-    body.append(h("h3", { id: "rvUnstarHead" }, `取消 star（${p.unstars.length}，最后一步执行）`),
+    body.append(h("h3", { id: "rvUnstarHead" }, t("hUnstar", p.unstars.length)),
       h("div", { class: "ptable", id: "rvUnstar" }, p.unstars.map(n => h("div", { class: "prow" }, h("span", { class: "prepo" }, n),
         h("span", { class: "pchg" }, h("span", { class: "pc del" }, "− star"))))));
     unstarOk = h("input", { type: "checkbox", id: "rvUnstarOk" });
     body.append(h("label", { class: "check confirm-unstar" }, unstarOk,
-      h("span", {}, `我确认取消这 ${p.unstars.length} 个仓库的 star。它们会从所有列表中移除；以后可以从备份恢复，但 star 时间会变成恢复当天。`)));
+      h("span", {}, t("confirmUnstar", p.unstars.length))));
   }
   const notes = [];
-  if (p.emptied) notes.push(`之后有 ${p.emptied} 个仓库不在任何列表中，它们仍保持 star。`);
-  if (p.temp_renames) notes.push(`为了交换列表名称，${p.temp_renames} 个列表会先临时改名。`);
+  if (p.emptied) notes.push(t("noteEmptied", p.emptied));
+  if (p.temp_renames) notes.push(t("noteTemp", p.temp_renames));
   for (const w of p.warnings) notes.push(w);
   if (notes.length) body.append(h("ul", { class: "notes" }, notes.map(n => h("li", {}, n))));
   let delFirst = null;
   if (!restore && p.creates.length && p.deletes.length) {
     delFirst = h("input", { type: "checkbox" });
-    body.append(h("label", { class: "check foot" }, delFirst, "先删除旧列表，再新建（如果 GitHub 提示列表数量已达上限，勾选这里再试）"));
+    body.append(h("label", { class: "check foot" }, delFirst, t("deleteFirst")));
   }
-  body.append(h("p", { class: "foot" }, "写入前会自动备份 GitHub 上的当前状态，之后可以在「备份」里一键恢复。"));
-  const go = h("button", { class: "primary", disabled: p.errors.length > 0 || !!unstarOk }, restore ? "恢复到这个备份" : "应用到 GitHub");
+  body.append(h("p", { class: "foot" }, t("backupNote")));
+  const go = h("button", { class: "primary", disabled: p.errors.length > 0 || !!unstarOk }, restore ? t("restoreThis") : t("applyGitHub"));
   if (unstarOk) unstarOk.addEventListener("change", () => { go.disabled = p.errors.length > 0 || !unstarOk.checked; });
   go.addEventListener("click", () => startApply(p, delFirst && delFirst.checked, !!(unstarOk && unstarOk.checked)));
-  acts.replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "取消"), go);
+  acts.replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, t("cancel")), go);
 }
 
 async function startApply(plan, deleteFirst, confirmUnstar) {
@@ -1328,8 +1663,8 @@ async function startApply(plan, deleteFirst, confirmUnstar) {
     renderProgress(S.job);
     startPolling();
   } catch (err) {
-    $("#rvBody").replaceChildren(h("h2", {}, "没能开始"), h("p", { class: "errtext" }, err.message));
-    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => $("#reviewDialog").close() }, "关闭"));
+    $("#rvBody").replaceChildren(h("h2", {}, t("cantStart")), h("p", { class: "errtext" }, err.message));
+    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => $("#reviewDialog").close() }, t("close")));
   }
 }
 
@@ -1352,13 +1687,12 @@ function renderProgress(j) {
   const pct = j.total ? Math.round(100 * j.step / j.total) : 0;
   const bar = h("div", { class: "bar" + (j.total ? "" : " indet") }, h("i", { style: j.total ? `width:${pct}%` : "" }));
   $("#rvBody").replaceChildren(
-    h("h2", {}, restore ? "正在恢复备份" : "正在应用到 GitHub"),
-    h("p", { class: "lead" }, j.phase || "准备中…"),
+    h("h2", {}, restore ? t("restoring") : t("applyingGH")),
+    h("p", { class: "lead" }, j.phase || t("preparing")),
     bar,
-    j.total ? h("p", { class: "small muted" }, `第 ${j.step}/${j.total} 步：${j.current}`) : null,
-    h("details", {}, h("summary", {}, "详细记录"), h("pre", {}, (j.log || []).join("\n"))));
-  $("#rvActions").replaceChildren(h("span", { class: "small muted" },
-    "写入期间请不要关闭终端窗口。关掉这个页面也没关系，重新打开会继续显示进度。"));
+    j.total ? h("p", { class: "small muted" }, t("stepOf", j.step, j.total, j.current)) : null,
+    h("details", {}, h("summary", {}, t("detailLog")), h("pre", {}, (j.log || []).join("\n"))));
+  $("#rvActions").replaceChildren(h("span", { class: "small muted" }, t("dontClose")));
 }
 
 async function jobEnded(j) {
@@ -1370,24 +1704,24 @@ async function jobEnded(j) {
       const d = await api("GET", "/api/state");
       setBaseline(d.baseline);
       if (keepName) { const l = S.lists.find(x => x.name === keepName); S.view = l ? l.key : "all"; }
-      render(); $("#saveState").textContent = "";
-    } catch (err) { toast("已完成，但重新读取失败：" + err.message, false); }
+      render(); saveNote("");
+    } catch (err) { toast(t("reloadFailed", err.message), false); }
     if (!dlg.open) dlg.showModal();
     $("#rvBody").replaceChildren(
-      h("h2", {}, restore ? "已恢复" : "已应用到 GitHub"),
-      h("p", { class: "lead" }, j.total ? (restore ? "GitHub 上的列表已恢复到备份时的样子。" : "GitHub 上的列表现在和你的草稿一致。") : (j.phase || "无需修改。")),
-      j.backup ? h("p", { class: "foot" }, `修改前的备份：${j.backup}（在「备份」里可以恢复）`) : null);
-    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { class: "primary", onclick: () => dlg.close() }, "完成"));
+      h("h2", {}, restore ? t("restoredT") : t("appliedT")),
+      h("p", { class: "lead" }, j.total ? (restore ? t("restoredLead") : t("appliedLead")) : (j.phase || t("nothingNeeded"))),
+      j.backup ? h("p", { class: "foot" }, t("backupBefore", j.backup)) : null);
+    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { class: "primary", onclick: () => dlg.close() }, t("done")));
   } else {
     render();
     if (!dlg.open) dlg.showModal();
     $("#rvBody").replaceChildren(
-      h("h2", {}, "没有全部完成"),
-      h("p", { class: "errtext" }, j.error || "出现了未知错误。"),
-      j.backup ? h("p", { class: "foot" }, `修改前的备份：${j.backup}`) : null,
-      h("details", {}, h("summary", {}, "详细记录"), h("pre", {}, (j.log || []).join("\n"))));
-    const again = h("button", { class: "primary", onclick: () => openReview(S.review && S.review.restore) }, "查看剩余修改");
-    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "关闭"), again);
+      h("h2", {}, t("notAllDone")),
+      h("p", { class: "errtext" }, j.error || t("unknownError")),
+      j.backup ? h("p", { class: "foot" }, t("backupBeforeShort", j.backup)) : null,
+      h("details", {}, h("summary", {}, t("detailLog")), h("pre", {}, (j.log || []).join("\n"))));
+    const again = h("button", { class: "primary", onclick: () => openReview(S.review && S.review.restore) }, t("reviewRemaining"));
+    $("#rvActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, t("close")), again);
   }
   S.job = null; renderTop();
 }
@@ -1416,8 +1750,6 @@ function rememberBackend(id) { try { localStorage.setItem(BACKEND_KEY, id); } ca
 const CHAT_KEY = "sl-chat", CHAT_HIST_KEY = "sl-chat-history", CHAT_HIST_MAX = 10, CHAT_CONTEXT = 12;
 const CHAT = { open: false, turns: [], fetchedAt: null, waiting: null, waitingLabel: "", poll: null,
                view: "current", archived: [], confirmClear: false };
-const CHAT_EXAMPLES = ["把量化、金融相关的仓库都移到 Finance", "FunProjects 太杂了，按主题拆成几个列表",
-  "哪些仓库还不在任何列表里？帮我归类", "把 EdgeAI 改名为「🔬 EdgeAI & Compression」"];
 const chatKeep = t => ({ role: t.role, text: t.text, ops: t.ops, changes: t.changes, warnings: t.warnings,
                          label: t.label, undone: t.undone, at: t.at });
 const isMessage = t => t.role === "user" || t.role === "ai";
@@ -1498,14 +1830,14 @@ function renderChat() {
   if (!CHAT.open) return;
   const { backends, st } = chatBackend();
   const sel = $("#chatBackend");
-  sel.replaceChildren(...backends.map(b => h("option", { value: b.id, selected: b.id === AI.form.backend }, b.label + (b.available ? "" : "（不可用）"))));
+  sel.replaceChildren(...backends.map(b => h("option", { value: b.id, selected: b.id === AI.form.backend }, b.label + (b.available ? "" : t("unavailable")))));
   sel.hidden = !backends.length;
   const note = $("#chatNote");
   note.replaceChildren();
-  if (!AI.status) note.append("正在检查 AI 设置…");
-  else if (!st || !st.available) note.append(h("div", { class: "warn" }, h("b", {}, "AI 还不能用："), (st && st.reason) || "没有可用的 AI 选项。",
+  if (!AI.status) note.append(t("checkingAI"));
+  else if (!st || !st.available) note.append(h("div", { class: "warn" }, h("b", {}, t("aiNotReady")), (st && st.reason) || t("noAIOption"),
     st && (st.setup || []).length ? h("pre", { class: "setup" }, st.setup.join("\n")) : null));
-  else if (st.warning) note.append(h("div", { class: "warn" }, h("b", {}, "安全提示："), st.warning));
+  else if (st.warning) note.append(h("div", { class: "warn" }, h("b", {}, t("securityNote")), st.warning));
   const log = $("#chatLog");
   log.replaceChildren();
   const inHistory = CHAT.view !== "current";
@@ -1514,68 +1846,68 @@ function renderChat() {
   $("#chatNew").disabled = !!CHAT.waiting || !CHAT.turns.some(isMessage) || (CHAT.turns[CHAT.turns.length - 1] || {}).role === "divider";
   if (inHistory) { renderHistory(log); return; }
   if (!CHAT.turns.length && !CHAT.waiting) {
-    log.append(h("div", { class: "chat-empty" }, "告诉 AI 你想怎么整理，例如：",
-      h("ul", {}, CHAT_EXAMPLES.map(e => h("li", {}, h("button", { class: "link", onclick: () => { $("#chatInput").value = e; $("#chatInput").focus(); } }, e)))),
-      "AI 的修改只进入草稿，每一步都可以撤销；写入 GitHub 仍需「预览修改」。",
-      CHAT.archived.length ? h("p", {}, "之前的对话已存入「历史」，可以随时查看。") : null));
+    log.append(h("div", { class: "chat-empty" }, t("chatIntro"),
+      h("ul", {}, t("chatExamples").map(e => h("li", {}, h("button", { class: "link", onclick: () => { $("#chatInput").value = e; $("#chatInput").focus(); } }, e)))),
+      t("chatDraftOnly"),
+      CHAT.archived.length ? h("p", {}, t("chatArchived")) : null));
   }
   const cut = lastDivider();
-  CHAT.turns.forEach((t, i) => log.append(t.role === "divider"
-    ? h("div", { class: "chat-divider" }, `新对话 · ${fmtTime(t.at)}`)
-    : turnEl(t, { old: i < cut })));
-  if (CHAT.waiting) log.append(h("div", { class: "msg ai pending", id: "chatPending" }, `${CHAT.waitingLabel || "AI"} 正在思考…`));
+  CHAT.turns.forEach((turn, i) => log.append(turn.role === "divider"
+    ? h("div", { class: "chat-divider" }, t("divider", fmtTime(turn.at)))
+    : turnEl(turn, { old: i < cut })));
+  if (CHAT.waiting) log.append(h("div", { class: "msg ai pending", id: "chatPending" }, t("thinking", CHAT.waitingLabel || "AI")));
   log.scrollTop = log.scrollHeight;
   const seg = currentSegment().filter(isMessage).length;
   $("#chatContext").textContent = !CHAT.turns.some(isMessage) ? ""
-    : seg === 0 ? "新对话：之前的消息不会发给 AI"
-    : `AI 参考本次对话最近 ${Math.min(seg, CHAT_CONTEXT)} 条消息` + (seg > CHAT_CONTEXT ? `（更早的 ${seg - CHAT_CONTEXT} 条不再参考）` : "");
+    : seg === 0 ? t("ctxNew")
+    : t("ctxRecent", Math.min(seg, CHAT_CONTEXT)) + (seg > CHAT_CONTEXT ? t("ctxOlder", seg - CHAT_CONTEXT) : "");
   $("#chatSend").disabled = !!CHAT.waiting || !st || !st.available;
 }
 
 function historySummary(a) {
   const msgs = a.turns.filter(isMessage);
   let added = 0, removed = 0, unstar = 0;
-  for (const t of a.turns) {
-    if (!t.changes || t.undone) continue;
-    t.changes.groups.forEach(g => { added += g.added.length; removed += g.removed.length; });
-    unstar += t.changes.unstar.length;
+  for (const turn of a.turns) {
+    if (!turn.changes || turn.undone) continue;
+    turn.changes.groups.forEach(g => { added += g.added.length; removed += g.removed.length; });
+    unstar += turn.changes.unstar.length;
   }
-  const bits = [`${msgs.length} 条消息`];
-  if (added) bits.push(`加入 ${added}`);
-  if (removed) bits.push(`移出 ${removed}`);
-  if (unstar) bits.push(`取消 star ${unstar}`);
+  const bits = [t("nMsgs", msgs.length)];
+  if (added) bits.push(t("nAdded", added));
+  if (removed) bits.push(t("nRemoved", removed));
+  if (unstar) bits.push(t("nUnstar", unstar));
   return bits.join(" · ");
 }
-const historyWhen = a => a.start ? fmtTime(a.start) + (a.end && a.end !== a.start ? ` – ${fmtTime(a.end)}` : "") : "时间未知";
+const historyWhen = a => a.start ? fmtTime(a.start) + (a.end && a.end !== a.start ? ` – ${fmtTime(a.end)}` : "") : t("timeUnknown");
 
 function renderHistory(log) {
   const back = (label, to) => h("button", { class: "link", onclick: () => { CHAT.view = to; CHAT.confirmClear = false; renderChat(); } }, label);
   if (CHAT.view === "history") {
-    log.append(h("div", { class: "hist-bar" }, h("b", {}, "历史记录"), h("span", { class: "muted" }, "（只读，仅保存在本机浏览器）"),
-      h("span", { class: "spacer" }), back("返回当前对话", "current")));
+    log.append(h("div", { class: "hist-bar" }, h("b", {}, t("histTitle")), h("span", { class: "muted" }, t("histReadOnly")),
+      h("span", { class: "spacer" }), back(t("backToChat"), "current")));
     if (!CHAT.archived.length) {
-      log.append(h("p", { class: "chat-empty" }, "还没有存档的对话。应用到 GitHub 或「重新读取」后，当时的对话会存到这里。"));
+      log.append(h("p", { class: "chat-empty" }, t("histEmpty")));
     } else {
       log.append(h("div", { class: "hist-list" }, CHAT.archived.map(a => {
-        const first = a.turns.find(t => t.role === "user");
+        const first = a.turns.find(turn => turn.role === "user");
         return h("button", { class: "hist-item", onclick: () => { CHAT.view = a.id; renderChat(); } },
           h("span", { class: "when" }, historyWhen(a)), h("span", { class: "sum" }, historySummary(a)),
-          first ? h("span", { class: "first" }, `「${first.text}」`) : null);
+          first ? h("span", { class: "first" }, q(first.text)) : null);
       })));
     }
     if (CHAT.archived.length || CHAT.turns.length) {
       log.append(h("button", { class: "ghost danger small", id: "chatClearAll", onclick: clearAllChat },
-        CHAT.confirmClear ? "确认清除？当前对话和全部历史都会删除" : "清除全部记录"));
+        CHAT.confirmClear ? t("confirmClearAll") : t("clearRecords")));
     }
     log.scrollTop = 0;
     return;
   }
   const a = CHAT.archived.find(x => x.id === CHAT.view);
   if (!a) { CHAT.view = "history"; renderHistory(log); return; }
-  log.append(h("div", { class: "hist-bar" }, h("b", {}, historyWhen(a)), h("span", { class: "spacer" }), back("返回列表", "history")));
-  a.turns.forEach(t => log.append(t.role === "divider"
-    ? h("div", { class: "chat-divider" }, `新对话 · ${fmtTime(t.at)}`)
-    : turnEl(t, { readOnly: true })));
+  log.append(h("div", { class: "hist-bar" }, h("b", {}, historyWhen(a)), h("span", { class: "spacer" }), back(t("backToList"), "history")));
+  a.turns.forEach(turn => log.append(turn.role === "divider"
+    ? h("div", { class: "chat-divider" }, t("divider", fmtTime(turn.at)))
+    : turnEl(turn, { readOnly: true })));
   log.scrollTop = 0;
 }
 
@@ -1583,7 +1915,7 @@ function clearAllChat() {
   if (!CHAT.confirmClear) { CHAT.confirmClear = true; renderChat(); return; }
   CHAT.turns = []; CHAT.archived = []; CHAT.confirmClear = false; CHAT.view = "current";
   saveChat(); saveHistory(); renderChat();
-  toast("已清除全部对话记录", false);
+  toast(t("clearedAll"), false);
 }
 
 // A tiny, safe Markdown subset for AI replies: paragraphs, "- " / "1. " lists, **bold**, `code`.
@@ -1641,23 +1973,23 @@ function draftChanges(beforeJson, afterJson) {
 
 function changesEl(c) {
   const added = c.groups.reduce((n, g) => n + g.added.length, 0), removed = c.groups.reduce((n, g) => n + g.removed.length, 0);
-  const head = [`改动了 ${c.groups.length} 个列表`];
-  if (added) head.push(`加入 ${added}`);
-  if (removed) head.push(`移出 ${removed}`);
-  if (c.unstar.length) head.push(`取消 star ${c.unstar.length}`);
-  if (c.keep.length) head.push(`保留 star ${c.keep.length}`);
+  const head = [t("chgLists", c.groups.length)];
+  if (added) head.push(t("nAdded", added));
+  if (removed) head.push(t("nRemoved", removed));
+  if (c.unstar.length) head.push(t("nUnstar", c.unstar.length));
+  if (c.keep.length) head.push(t("nKeep", c.keep.length));
   const open = c.groups.length + (c.unstar.length ? 1 : 0) + (c.keep.length ? 1 : 0) <= 2;
   const row = (color, title, onGo, tags, items) => h("details", { class: "change", open },
     h("summary", {}, star(color),
-      onGo ? h("button", { class: "link cname", title: "查看这个列表", onclick: e => { e.preventDefault(); onGo(); } }, title)
+      onGo ? h("button", { class: "link cname", title: t("showList"), onclick: e => { e.preventDefault(); onGo(); } }, title)
            : h("span", { class: "cname" }, title),
       h("span", { class: "tags" }, tags)),
     items.length ? h("ul", {}, items) : null);
   const rows = c.groups.map(g => {
     const tags = [], items = [];
-    if (g.created) tags.push(h("span", { class: "tagc meta" }, "新建"));
-    if (g.renamedFrom) { tags.push(h("span", { class: "tagc meta" }, "改名")); items.push(h("li", {}, `原名「${g.renamedFrom}」`)); }
-    if (g.deleted) { tags.push(h("span", { class: "tagc del" }, "删除")); items.push(h("li", {}, "删除这个列表，其中的仓库仍保持 star")); }
+    if (g.created) tags.push(h("span", { class: "tagc meta" }, t("tagNew")));
+    if (g.renamedFrom) { tags.push(h("span", { class: "tagc meta" }, t("tagRenamed"))); items.push(h("li", {}, t("wasNamed", g.renamedFrom))); }
+    if (g.deleted) { tags.push(h("span", { class: "tagc del" }, t("tagDeleted"))); items.push(h("li", {}, t("listDeletedNote"))); }
     if (g.added.length) tags.push(h("span", { class: "tagc add" }, `+${g.added.length}`));
     if (g.removed.length) tags.push(h("span", { class: "tagc del" }, `−${g.removed.length}`));
     g.added.forEach(n => items.push(h("li", { class: "add" }, n)));
@@ -1665,45 +1997,45 @@ function changesEl(c) {
     const go = !g.deleted ? () => { const l = findList(g.key); if (l && !l.deleted) setView(l.key); } : null;
     return row(PALETTE[(g.color || 0) % PALETTE.length], g.name, go, tags, items);
   });
-  if (c.unstar.length) rows.push(row("var(--remove)", "取消 star", () => S.unstar.size && setView("unstar"),
+  if (c.unstar.length) rows.push(row("var(--remove)", t("unstar"), () => S.unstar.size && setView("unstar"),
     [h("span", { class: "tagc del" }, `${c.unstar.length}`)], c.unstar.map(n => h("li", { class: "del" }, n))));
-  if (c.keep.length) rows.push(row("var(--add)", "保留 star", null,
+  if (c.keep.length) rows.push(row("var(--add)", t("keepStar"), null,
     [h("span", { class: "tagc add" }, `${c.keep.length}`)], c.keep.map(n => h("li", { class: "add" }, n))));
   return h("div", { class: "changes" }, h("div", { class: "changes-head" }, head.join(" · ")), rows);
 }
 
-function turnEl(t, opts = {}) {
+function turnEl(turn, opts = {}) {
   const old = opts.old ? " old" : "";
-  if (t.role === "user") return h("div", { class: "msg me" + old }, t.text);
-  if (t.role === "err") return h("div", { class: "msg ai err" + old }, t.text);
-  const canUndo = !opts.readOnly && !!t.after && !t.undone && snapState() === t.after;
-  const hasChanges = t.changes ? (t.changes.groups.length + t.changes.unstar.length + t.changes.keep.length > 0) : (t.ops || []).length > 0;
-  return h("div", { class: "msg ai" + old }, mdEl(t.text),
-    t.changes ? (hasChanges ? changesEl(t.changes) : null)
-      : (t.ops || []).length ? h("ul", { class: "done" }, t.ops.map(o => h("li", {}, o))) : null,
-    (t.warnings || []).length ? h("ul", { class: "skipped" }, t.warnings.map(w => h("li", {}, w))) : null,
-    hasChanges && opts.readOnly ? h("div", { class: "turn-foot" }, h("span", {}, t.undone ? "当时撤销了这一步" : "当时写入了草稿")) :
-    hasChanges ? h("div", { class: "turn-foot" }, h("span", {}, t.undone ? "已撤销这一步" : "已写入草稿（还没有写入 GitHub）"),
-      t.undone ? null : h("button", { class: "link undo-turn", disabled: !canUndo,
-        title: canUndo ? "撤销 AI 这一步对草稿的修改" : "之后草稿又改过；请用顶部的「撤销」逐步撤回",
-        onclick: () => undoTurn(t) }, "撤销这一步")) : null);
+  if (turn.role === "user") return h("div", { class: "msg me" + old }, turn.text);
+  if (turn.role === "err") return h("div", { class: "msg ai err" + old }, turn.text);
+  const canUndo = !opts.readOnly && !!turn.after && !turn.undone && snapState() === turn.after;
+  const hasChanges = turn.changes ? (turn.changes.groups.length + turn.changes.unstar.length + turn.changes.keep.length > 0) : (turn.ops || []).length > 0;
+  return h("div", { class: "msg ai" + old }, mdEl(turn.text),
+    turn.changes ? (hasChanges ? changesEl(turn.changes) : null)
+      : (turn.ops || []).length ? h("ul", { class: "done" }, turn.ops.map(o => h("li", {}, o))) : null,
+    (turn.warnings || []).length ? h("ul", { class: "skipped" }, turn.warnings.map(w => h("li", {}, w))) : null,
+    hasChanges && opts.readOnly ? h("div", { class: "turn-foot" }, h("span", {}, turn.undone ? t("wasUndone") : t("wasApplied"))) :
+    hasChanges ? h("div", { class: "turn-foot" }, h("span", {}, turn.undone ? t("stepUndone") : t("inDraft")),
+      turn.undone ? null : h("button", { class: "link undo-turn", disabled: !canUndo,
+        title: canUndo ? t("undoTurnTitle") : t("undoTurnBlocked"),
+        onclick: () => undoTurn(turn) }, t("undoTurn"))) : null);
 }
 
-function undoTurn(t) {
-  if (!t.after || snapState() !== t.after) return;
-  commit(() => loadState(t.before));
-  t.undone = true;
+function undoTurn(turn) {
+  if (!turn.after || snapState() !== turn.after) return;
+  commit(() => loadState(turn.before));
+  turn.undone = true;
   saveChat(); renderChat();
-  toast("已撤销 AI 助手的这一步", false);
+  toast(t("turnUndone"), false);
 }
 
 async function sendChat() {
   const input = $("#chatInput");
   const text = input.value.trim();
   if (!text || CHAT.waiting) return;
-  const history = currentSegment().filter(isMessage).slice(-CHAT_CONTEXT).map(t => ({
-    role: t.role === "user" ? "user" : "assistant",
-    text: t.role === "ai" && (t.ops || []).length ? `${t.text}\n（已改草稿：${t.ops.join("；")}${t.undone ? "；随后被撤销" : ""}）` : t.text,
+  const history = currentSegment().filter(isMessage).slice(-CHAT_CONTEXT).map(turn => ({
+    role: turn.role === "user" ? "user" : "assistant",
+    text: turn.role === "ai" && (turn.ops || []).length ? `${turn.text}\n${t("draftNote", turn.ops, turn.undone)}` : turn.text,
   }));
   const body = { message: text, history, backend: AI.form.backend, unstar: [...S.unstar],
     lists: alive().map(l => ({ key: l.key, name: l.name.trim(), description: l.description, items: [...l.items] })) };
@@ -1729,13 +2061,13 @@ function pollChat() {
     if (j.id !== CHAT.waiting) { clearInterval(CHAT.poll); return; }
     if (j.status === "running") {
       const el = $("#chatPending");
-      if (el) el.textContent = `${j.label || "AI"} 正在思考…（${Math.round(j.elapsed)} 秒）`;
+      if (el) el.textContent = t("thinkingSec", j.label || "AI", Math.round(j.elapsed));
       return;
     }
     clearInterval(CHAT.poll); CHAT.waiting = null;
     if (j.ai) AI.status = j.ai;
     if (j.status === "done") finishChat(j.result, j.label);
-    else { CHAT.turns.push({ role: "err", text: j.error || "出现了未知错误。", at: nowIso() }); saveChat(); renderChat(); }
+    else { CHAT.turns.push({ role: "err", text: j.error || t("unknownError"), at: nowIso() }); saveChat(); renderChat(); }
   }, 1000);
 }
 
@@ -1743,7 +2075,7 @@ function pollChat() {
 function applyChatOps(ops) {
   const done = [], skipped = [], made = {};
   const nameOf = id => (S.repos.get(id) || {}).full_name || id;
-  const few = ids => ids.length <= 3 ? ids.map(nameOf).join("、") : `${ids.slice(0, 2).map(nameOf).join("、")} 等 ${ids.length} 个仓库`;
+  const few = ids => t("few", ids.slice(0, 3).map(nameOf), ids.length);
   const target = ref => {
     const key = ref && ref.startsWith("new:") ? made[ref] : ref;
     const l = key ? findList(key) : null;
@@ -1754,16 +2086,16 @@ function applyChatOps(ops) {
     const ids = (o.repos || []).filter(id => S.repos.has(id));
     if (o.op === "create_list") {
       const twin = clash(o.name);
-      if (twin) { made[o.list] = twin.key; skipped.push(`已经有「${twin.name}」，没有重复新建`); continue; }
+      if (twin) { made[o.list] = twin.key; skipped.push(t("opsDup", twin.name)); continue; }
       const key = `new-${S.newSeq++}`;
       S.lists.push({ key, id: null, name: o.name, description: o.description || "", private: false, items: new Set(), deleted: false, color: nextColor() });
       made[o.list] = key;
-      done.push(`新建列表「${o.name}」`);
+      done.push(t("opsCreated", o.name));
       continue;
     }
     if (o.op === "unstar") {
       const ok = ids.filter(id => S.repos.get(id).starred && !S.unstar.has(id));
-      if (ok.length) { clearRaw(ok); ok.forEach(id => S.unstar.add(id)); done.push(`标记取消 star：${few(ok)}`); }
+      if (ok.length) { clearRaw(ok); ok.forEach(id => S.unstar.add(id)); done.push(t("opsUnstar", few(ok))); }
       continue;
     }
     if (o.op === "keep_star") {
@@ -1772,33 +2104,33 @@ function applyChatOps(ops) {
         S.unstar.delete(id);
         for (const l of alive()) { const b = S.base.get(l.key); if (b && b.items.has(id)) l.items.add(id); }
       });
-      if (ok.length) done.push(`保留 star：${few(ok)}`);
+      if (ok.length) done.push(t("opsKeep", few(ok)));
       continue;
     }
     const l = target(o.list);
-    if (!l) { skipped.push("有一步要操作的列表已经不存在，跳过了"); continue; }
+    if (!l) { skipped.push(t("opsGone")); continue; }
     if (o.op === "rename_list") {
-      if (clash(o.name, l)) { skipped.push(`已经有叫「${o.name}」的列表，没有改名`); continue; }
+      if (clash(o.name, l)) { skipped.push(t("opsRenameClash", o.name)); continue; }
       const old = l.name;
       l.name = o.name;
       if (o.description) l.description = o.description;
-      if (old !== o.name) done.push(`把「${old}」改名为「${o.name}」`);
+      if (old !== o.name) done.push(t("opsRenamed", old, o.name));
     } else if (o.op === "delete_list") {
       if (!l.id) S.lists.splice(S.lists.indexOf(l), 1); else l.deleted = true;
-      done.push(`删除列表「${l.name}」（其中的仓库仍保持 star）`);
+      done.push(t("opsDeleted", l.name));
     } else if (o.op === "add") {
       const n = ids.filter(id => !l.items.has(id));
       n.forEach(id => { l.items.add(id); S.unstar.delete(id); });
-      if (n.length) done.push(`把 ${few(n)} 加入「${l.name}」`);
+      if (n.length) done.push(t("opsAdded", few(n), l.name));
     } else if (o.op === "remove") {
       const n = ids.filter(id => l.items.has(id));
       n.forEach(id => l.items.delete(id));
-      if (n.length) done.push(`把 ${few(n)} 移出「${l.name}」`);
+      if (n.length) done.push(t("opsRemoved", few(n), l.name));
     } else if (o.op === "move") {
       const to = target(o.to);
-      if (!to) { skipped.push("有一步要移入的列表已经不存在，跳过了"); continue; }
+      if (!to) { skipped.push(t("opsToGone")); continue; }
       ids.forEach(id => { l.items.delete(id); to.items.add(id); S.unstar.delete(id); });
-      if (ids.length) done.push(`把 ${few(ids)} 从「${l.name}」移到「${to.name}」`);
+      if (ids.length) done.push(t("opsMoved", few(ids), l.name, to.name));
     }
   }
   return { done, skipped };
@@ -1810,11 +2142,11 @@ function finishChat(res, label) {
   const changed = commit(() => { out = applyChatOps(res.operations || []); });
   S.lists.filter(l => !l.id && !l.deleted).forEach(l => rememberColor(l));
   const after = snapState();
-  CHAT.turns.push({ role: "ai", label, at: nowIso(), text: res.reply || (changed ? "已按你的要求修改了草稿。" : "草稿不需要修改。"),
+  CHAT.turns.push({ role: "ai", label, at: nowIso(), text: res.reply || (changed ? t("aiChanged") : t("aiNoChange")),
     ops: changed ? out.done : [], changes: changed ? draftChanges(before, after) : null,
     warnings: [...(res.warnings || []), ...out.skipped], before: changed ? before : null, after: changed ? after : null });
   saveChat(); renderChat();
-  if (changed) toast(`AI 助手修改了草稿（${out.done.length} 处）`);
+  if (changed) toast(t("aiToast", out.done.length));
 }
 
 // The drawer's width: drag its left edge (or focus it and use ←/→); double-click resets. Remembered per browser.
@@ -1876,22 +2208,22 @@ $("#chatInput").addEventListener("keydown", e => {
 });
 
 // ------------------------------------------------------------------ backups
-const KIND = { export: "导出", preapply: "应用前", prerestore: "恢复前" };
+const KIND = { export: "kindExport", preapply: "kindPreapply", prerestore: "kindPrerestore" };
 async function openBackups() {
   const dlg = $("#backupDialog"), list = $("#bkList");
   const dirty = summary().total > 0;
   $("#bkNote").hidden = !dirty;
-  list.replaceChildren(h("p", { class: "empty-side" }, "正在读取备份…"));
+  list.replaceChildren(h("p", { class: "empty-side" }, t("readingBackups")));
   dlg.showModal();
   try {
     const { snapshots } = await api("GET", "/api/snapshots");
     list.replaceChildren();
-    if (!snapshots.length) list.append(h("p", { class: "empty-side" }, "还没有备份。第一次应用修改时会自动创建。"));
+    if (!snapshots.length) list.append(h("p", { class: "empty-side" }, t("noBackups")));
     for (const s of snapshots) {
       list.append(h("div", { class: "snap" },
-        h("span", { class: "kind" }, KIND[s.kind] || "备份"),
-        h("span", {}, fmtTime(s.fetched_at), h("span", { class: "muted small" }, `　${s.lists} 个列表，${s.starred} 个 star`)),
-        h("button", { disabled: dirty, onclick: () => { dlg.close(); openReview(s); } }, "预览恢复")));
+        h("span", { class: "kind" }, t(KIND[s.kind] || "kindBackup")),
+        h("span", {}, fmtTime(s.fetched_at), h("span", { class: "muted small" }, t("snapInfo", s.lists, s.starred))),
+        h("button", { disabled: dirty, onclick: () => { dlg.close(); openReview(s); } }, t("previewRestore"))));
     }
   } catch (err) {
     list.replaceChildren(h("p", { class: "errtext" }, err.message));
@@ -1916,13 +2248,13 @@ $("#toastUndo").addEventListener("click", () => { $("#toast").hidden = true; und
 $("#btnDiscard").addEventListener("click", () => {
   const colors = new Map(S.lists.map(l => [l.key, l.color]));
   const fresh = [...S.base.entries()].map(([key, b]) => ({ key, id: key, name: b.name, description: b.description, private: b.private, deleted: false, color: colors.get(key) ?? 0, items: [...b.items] }));
-  if (commit(() => { loadLists(fresh); S.unstar = new Set(); })) toast("已放弃全部修改");
+  if (commit(() => { loadLists(fresh); S.unstar = new Set(); })) toast(t("discarded"));
 });
 $("#btnRefresh").addEventListener("click", async () => {
-  const b = $("#btnRefresh"); b.disabled = true; b.textContent = "正在读取…";
-  try { const d = await api("POST", "/api/refresh"); setBaseline(d.baseline); render(); toast("已从 GitHub 重新读取", false); }
-  catch (err) { toast("读取失败：" + err.message, false); }
-  finally { b.textContent = "重新读取"; renderTop(); }
+  const b = $("#btnRefresh"); b.disabled = true; b.textContent = t("reading");
+  try { const d = await api("POST", "/api/refresh"); setBaseline(d.baseline); render(); toast(t("refreshed"), false); }
+  catch (err) { toast(t("readFailed", err.message), false); }
+  finally { b.textContent = t("refresh"); renderTop(); }
 });
 $("#btnReview").addEventListener("click", () => {
   if (S.job && S.job.status === "running") { $("#reviewDialog").showModal(); renderProgress(S.job); return; }
@@ -1938,8 +2270,8 @@ $("#selAll").addEventListener("change", e => {
   if (e.target.checked) S.visible.forEach(id => S.sel.add(id)); else S.sel.clear();
   renderSelection();
 });
-$("#bAdd").addEventListener("click", e => openPicker(e.currentTarget, { mode: "add", ids: [...S.sel], title: `把 ${S.sel.size} 个仓库加入…` }));
-$("#bMove").addEventListener("click", e => openPicker(e.currentTarget, { mode: "move", ids: [...S.sel], title: `把 ${S.sel.size} 个仓库移到…` }));
+$("#bAdd").addEventListener("click", e => openPicker(e.currentTarget, { mode: "add", ids: [...S.sel], title: t("addN", S.sel.size) }));
+$("#bMove").addEventListener("click", e => openPicker(e.currentTarget, { mode: "move", ids: [...S.sel], title: t("moveN", S.sel.size) }));
 $("#bRemove").addEventListener("click", () => { const ids = [...S.sel]; S.sel.clear(); doRemove(S.view, ids); });
 $("#bClear").addEventListener("click", () => { const ids = [...S.sel]; doClear(ids); });
 $("#bUnstar").addEventListener("click", () => doUnstar([...S.sel]));
@@ -1970,7 +2302,7 @@ $("#rows").addEventListener("click", e => {
   if (name === "chip-restore") { doAdd(act.dataset.key, [id]); return; }
   if (name === "restore-here") { doAdd(S.view, [id]); return; }
   if (name === "keep-star") { doKeepStar([id]); return; }
-  if (name === "pick-lists") { openPicker(act, { mode: "toggle", ids: [id], title: "放进哪些列表" }); return; }
+  if (name === "pick-lists") { openPicker(act, { mode: "toggle", ids: [id], title: t("whichLists") }); return; }
   if (e.target.closest("button, input, select, label")) return;
   if (window.getSelection && String(window.getSelection())) return;   // user is selecting text
   toggleSel(id, e.shiftKey);
@@ -2039,12 +2371,12 @@ document.addEventListener("keydown", e => {
 async function boot() {
   const msg = $("#bootMsg"), retry = $("#bootRetry");
   if (!TOKEN) {
-    msg.textContent = "请用启动时终端里显示的完整链接打开这个页面（链接末尾带有 #t=…）。";
+    msg.textContent = t("needLink");
     document.querySelector("#boot .star").classList.remove("spin");
     return;
   }
   retry.hidden = true;
-  msg.textContent = "正在从 GitHub 读取你的 star 和列表…";
+  msg.textContent = t("loading");
   try {
     const d = await api("GET", "/api/state");
     setBaseline(d.baseline);
@@ -2057,18 +2389,35 @@ async function boot() {
     $("#boot").hidden = true;
     $("#app").hidden = false;
     render();
-    if (d.draft && summary().total) { $("#saveState").textContent = "草稿已自动保存"; toast(`已恢复上次未应用的 ${summary().total} 处修改`, false); }
+    if (d.draft && summary().total) { saveNote("saved"); toast(t("restoredDraft", summary().total), false); }
     if (d.job && d.job.status === "running") {
       S.job = d.job; S.review = { restore: null };
       renderTop(); $("#reviewDialog").showModal(); renderProgress(d.job); startPolling();
     }
   } catch (err) {
-    msg.textContent = "读取失败：" + err.message;
+    msg.textContent = t("readFailed", err.message);
     document.querySelector("#boot .star").classList.remove("spin");
     retry.hidden = false;
   }
 }
 $("#bootRetry").addEventListener("click", boot);
+
+// Switching the language redraws everything; stored chat messages keep the language they were written in.
+$("#uiLang").addEventListener("change", e => {
+  const v = e.target.value;
+  if (v !== "zh" && v !== "en") return;
+  LANG = v;
+  try { localStorage.setItem(LANG_KEY, v); } catch (_) {}
+  tellApp();
+  applyStatic();
+  if ($("#app").hidden) return;
+  closePopover();
+  fillLanguages();
+  render();
+  saveNote(SAVE_NOTE.key, SAVE_NOTE.arg);
+  AI.status = null;             // its reasons and notes come from the server in the old language
+  if (CHAT.open) toggleChat(true); else renderChat();
+});
 boot();
 })();
 </script>

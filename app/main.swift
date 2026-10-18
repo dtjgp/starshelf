@@ -3,12 +3,17 @@
 // The app starts the bundled Python backend (127.0.0.1 only), shows its page in a WKWebView,
 // opens GitHub links in your normal browser, and stops the backend when you quit. Quitting
 // while GitHub is being written to asks first, because that would interrupt the write.
+//
+// Language: English or Simplified Chinese. The page has the switch; it tells the app (message
+// handler "starshelf"), which keeps the choice in the user default SLLanguage and uses it for its
+// menus, dialogs and status pages, for the backend (--lang) and as the page's first-run default.
 
 import Cocoa
 import WebKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate,
+                         WKScriptMessageHandler {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var server: Process?
@@ -18,12 +23,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var quitting = false
     private var reusedInstance = false
 
+    // MARK: - Language
+
+    private var lang: String {
+        if let saved = UserDefaults.standard.string(forKey: "SLLanguage"), saved == "zh" || saved == "en" { return saved }
+        return (Locale.preferredLanguages.first ?? "").hasPrefix("zh") ? "zh" : "en"
+    }
+
+    private func L(_ zh: String, _ en: String) -> String { lang == "zh" ? zh : en }
+
+    /// The page reports its language (on load and when the user switches it).
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any], let new = body["lang"] as? String,
+              new == "zh" || new == "en" else { return }
+        if new != UserDefaults.standard.string(forKey: "SLLanguage") {
+            UserDefaults.standard.set(new, forKey: "SLLanguage")
+            buildMenu()
+        }
+    }
+
+    /// The backend's URL plus the language hint the page uses until it has its own choice.
+    private var pageURL: URL? {
+        serverURL.flatMap { URL(string: $0.absoluteString + "&lang=\(lang)") }
+    }
+
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
+        config.userContentController.add(self, name: "starshelf")
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -42,7 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        showPage(title: "正在启动 Starshelf", body: "正在从 GitHub 读取你的 star 和列表…", spinning: true)
+        showPage(title: L("正在启动 Starshelf", "Starting Starshelf"),
+                 body: L("正在从 GitHub 读取你的 star 和列表…", "Reading your stars and lists from GitHub…"), spinning: true)
         startServer()
     }
 
@@ -72,14 +103,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func startServer() {
         guard let python = findPython() else {
-            showPage(title: "找不到 Python 3",
-                     body: "Starshelf 需要 Python 3。请先安装（例如在终端运行 brew install python），然后重新打开。")
+            showPage(title: L("找不到 Python 3", "Python 3 not found"),
+                     body: L("Starshelf 需要 Python 3。请先安装（例如在终端运行 brew install python），然后重新打开。",
+                             "Starshelf needs Python 3. Install it (for example, run brew install python in a terminal), then open Starshelf again."))
             return
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: python)
         process.arguments = ["-u", "-B", "\(resources)/star_lists_ui.py",
-                             "--no-browser", "--exit-with-parent", "--dir", dataDir]
+                             "--no-browser", "--exit-with-parent", "--dir", dataDir, "--lang", lang]
         var env = ProcessInfo.processInfo.environment
         let home = NSHomeDirectory()
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(home)/miniconda3/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -112,7 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             try process.run()
             server = process
         } catch {
-            showPage(title: "无法启动后台程序", body: error.localizedDescription)
+            showPage(title: L("无法启动后台程序", "Cannot start the backend"), body: error.localizedDescription)
         }
     }
 
@@ -123,8 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if let range = text.range(of: #"http://127\.0\.0\.1:\d+/#t=[A-Za-z0-9_\-]+"#, options: .regularExpression),
            let url = URL(string: String(text[range])) {
             serverURL = url
-            reusedInstance = text.contains("已在运行")
-            webView.load(URLRequest(url: url))
+            reusedInstance = text.contains("已在运行") || text.contains("already running")
+            if let page = pageURL { webView.load(URLRequest(url: page)) }
         }
     }
 
@@ -133,13 +165,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if quitting || (reusedInstance && status == 0) { return }
         let log = (String(decoding: errData, as: UTF8.self) + "\n" + String(decoding: outData, as: UTF8.self))
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        var hint = "请退出 Starshelf 后重新打开。"
+        var hint = L("请退出 Starshelf 后重新打开。", "Quit Starshelf and open it again.")
         if log.contains("No GitHub token") || log.contains("HTTP 401") {
-            hint = "GitHub 登录信息无效。请在终端运行 gh auth login，然后重新打开 Starshelf。"
+            hint = L("GitHub 登录信息无效。请在终端运行 gh auth login，然后重新打开 Starshelf。",
+                     "The GitHub sign-in is not valid. Run gh auth login in a terminal, then open Starshelf again.")
         }
         serverURL = nil
-        showPage(title: "Starshelf 的后台程序停止了", body: hint,
-                 detail: log.isEmpty ? "退出码 \(status)" : String(log.suffix(6000)))
+        showPage(title: L("Starshelf 的后台程序停止了", "The Starshelf backend stopped"), body: hint,
+                 detail: log.isEmpty ? L("退出码 \(status)", "Exit code \(status)") : String(log.suffix(6000)))
     }
 
     private func stopServer() {
@@ -184,10 +217,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private func confirmQuit(running: Bool) {
         if running {
             let alert = NSAlert()
-            alert.messageText = "正在写入 GitHub"
-            alert.informativeText = "现在退出会中断写入。已经写入的部分会保留，下次打开后点「查看剩余修改」就能继续。"
-            alert.addButton(withTitle: "继续等待")
-            alert.addButton(withTitle: "仍然退出")
+            alert.messageText = L("正在写入 GitHub", "Writing to GitHub")
+            alert.informativeText = L("现在退出会中断写入。已经写入的部分会保留，下次打开后点「查看剩余修改」就能继续。",
+                                      "Quitting now interrupts the write. The part already written stays; next time, click “Review remaining changes” to continue.")
+            alert.addButton(withTitle: L("继续等待", "Keep Waiting"))
+            alert.addButton(withTitle: L("仍然退出", "Quit Anyway"))
             if alert.runModal() == .alertFirstButtonReturn {
                 NSApp.reply(toApplicationShouldTerminate: false)
                 return
@@ -219,7 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        if let url = serverURL { webView.load(URLRequest(url: url)) }
+        if let url = pageURL { webView.load(URLRequest(url: url)) }
     }
 
     private func esc(_ s: String) -> String {
@@ -230,7 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private func showPage(title: String, body: String, spinning: Bool = false, detail: String? = nil) {
         let pre = detail.map { "<pre>\(esc($0))</pre>" } ?? ""
         let html = """
-        <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>
+        <!doctype html><html lang="\(lang == "zh" ? "zh-CN" : "en")"><head><meta charset="utf-8"><style>
         :root{--paper:#EDF0F4;--ink:#1B2333;--ink2:#566175;--gold:#B47E0E;--sunk:#F5F7FA;color-scheme:light dark}
         @media (prefers-color-scheme:dark){:root{--paper:#111722;--ink:#E4E8F0;--ink2:#A3ADBF;--gold:#E2B048;--sunk:#171F2D}}
         html,body{height:100%;margin:0}
@@ -259,11 +293,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     @objc private func openInBrowser(_ sender: Any?) {
-        if let url = serverURL { NSWorkspace.shared.open(url) }
+        if let url = pageURL { NSWorkspace.shared.open(url) }
     }
 
     @objc private func reloadPage(_ sender: Any?) {
-        if let url = serverURL { webView.load(URLRequest(url: url)) } else { webView.reload() }
+        if let url = pageURL { webView.load(URLRequest(url: url)) } else { webView.reload() }
     }
 
     @objc private func zoomIn(_ sender: Any?) { webView.pageZoom = min(webView.pageZoom + 0.1, 2.0) }
@@ -274,45 +308,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let main = NSMenu()
 
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "关于 Starshelf",
+        appMenu.addItem(withTitle: L("关于 Starshelf", "About Starshelf"),
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "在访达中显示数据文件夹", action: #selector(showDataFolder(_:)), keyEquivalent: "")
-        appMenu.addItem(withTitle: "在浏览器中打开", action: #selector(openInBrowser(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: L("在访达中显示数据文件夹", "Show Data Folder in Finder"),
+                        action: #selector(showDataFolder(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: L("在浏览器中打开", "Open in Browser"), action: #selector(openInBrowser(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "隐藏 Starshelf", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: "退出 Starshelf", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: L("隐藏 Starshelf", "Hide Starshelf"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: L("退出 Starshelf", "Quit Starshelf"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let appItem = NSMenuItem()
         appItem.submenu = appMenu
         main.addItem(appItem)
 
         // The page handles ⌘Z / ⇧⌘Z / ⌘A itself; these items make them (and copy/paste) work in text fields.
-        let edit = NSMenu(title: "编辑")
-        edit.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = edit.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "z")
+        let edit = NSMenu(title: L("编辑", "Edit"))
+        edit.addItem(withTitle: L("撤销", "Undo"), action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = edit.addItem(withTitle: L("重做", "Redo"), action: Selector(("redo:")), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         edit.addItem(.separator())
-        edit.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(withTitle: L("剪切", "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: L("拷贝", "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: L("粘贴", "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: L("全选", "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         let editItem = NSMenuItem()
         editItem.submenu = edit
         main.addItem(editItem)
 
-        let view = NSMenu(title: "显示")
-        view.addItem(withTitle: "重新载入", action: #selector(reloadPage(_:)), keyEquivalent: "r")
+        let view = NSMenu(title: L("显示", "View"))
+        view.addItem(withTitle: L("重新载入", "Reload"), action: #selector(reloadPage(_:)), keyEquivalent: "r")
         view.addItem(.separator())
-        view.addItem(withTitle: "实际大小", action: #selector(zoomReset(_:)), keyEquivalent: "0")
-        view.addItem(withTitle: "放大", action: #selector(zoomIn(_:)), keyEquivalent: "+")
-        view.addItem(withTitle: "缩小", action: #selector(zoomOut(_:)), keyEquivalent: "-")
+        view.addItem(withTitle: L("实际大小", "Actual Size"), action: #selector(zoomReset(_:)), keyEquivalent: "0")
+        view.addItem(withTitle: L("放大", "Zoom In"), action: #selector(zoomIn(_:)), keyEquivalent: "+")
+        view.addItem(withTitle: L("缩小", "Zoom Out"), action: #selector(zoomOut(_:)), keyEquivalent: "-")
         let viewItem = NSMenuItem()
         viewItem.submenu = view
         main.addItem(viewItem)
 
-        let win = NSMenu(title: "窗口")
-        win.addItem(withTitle: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        win.addItem(withTitle: "关闭", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        let win = NSMenu(title: L("窗口", "Window"))
+        win.addItem(withTitle: L("最小化", "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        win.addItem(withTitle: L("关闭", "Close"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let winItem = NSMenuItem()
         winItem.submenu = win
         main.addItem(winItem)
