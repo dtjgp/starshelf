@@ -91,6 +91,10 @@ from a single move to a complete new layout. It asks back when a request is uncl
   one row per list with `+N` / `−N` tags, new / renamed / deleted lists and the unstar marks; open a
   row to see which repositories moved, click the list name to jump to it.
 - Every answer is one step in your draft: undo it from the message or with the normal undo.
+- **新对话** (new conversation) starts a new topic: earlier messages stay visible but are no longer sent
+  to the AI. A note under the input says how many recent messages the AI is using.
+- After you apply to GitHub or reread it, the conversation is archived. **历史** (history) lists the last
+  10 conversations with their changes, read-only; they stay in this browser only and can be cleared.
 - Drag the panel's left edge to make it wider or narrower (or focus the edge and use ← / →;
   double-click resets it). The width is remembered.
 
