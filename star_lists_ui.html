@@ -308,9 +308,14 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
 .ghostdrag { position: fixed; top: -200px; left: -200px; padding: 6px 11px; border-radius: 7px; background: var(--ink); color: var(--panel); font-size: 13px; }
 
 /* ---------- AI assistant drawer ---------- */
-.app.chat-open { grid-template-columns: 300px minmax(0, 1fr) 380px; }
+.app.chat-open { grid-template-columns: 300px minmax(0, 1fr) var(--chat-w, 400px); }
 .chat { display: none; }
-.app.chat-open .chat { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--rule); }
+.app.chat-open .chat { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--rule); position: relative; }
+.chat-resize { position: absolute; left: -5px; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 6; touch-action: none; }
+.chat-resize::after { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: transparent; transition: background .15s; }
+.chat-resize:hover::after, .chat-resize:focus-visible::after, .chat-resize.dragging::after { background: var(--focus); }
+.chat-resize:focus-visible { outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
 .chat-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--rule-2); }
 .chat-head h2 { margin: 0; font-size: 15px; font-weight: 600; flex: 1; }
 .chat-head select { max-width: 150px; font-size: 12.5px; padding: 4px 6px; }
@@ -320,7 +325,31 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
 .chat-log { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .msg { max-width: 92%; padding: 8px 11px; border-radius: 10px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.me { align-self: flex-end; background: var(--sel); }
-.msg.ai { align-self: flex-start; background: var(--sunk); }
+.msg.ai { align-self: flex-start; background: var(--sunk); white-space: normal; width: 92%; }
+.md p { margin: 0 0 6px; }
+.md p:last-child, .md ul:last-child, .md ol:last-child { margin-bottom: 0; }
+.md ul, .md ol { margin: 2px 0 6px; padding-left: 20px; font-size: 13.5px; }
+.md li { margin: 2px 0; }
+.md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--panel); padding: 0 4px; border-radius: 4px; }
+.changes { margin-top: 8px; border: 1px solid var(--rule-2); border-radius: 8px; background: var(--panel); overflow: hidden; }
+.changes-head { padding: 6px 10px; font-size: 12px; color: var(--ink-2); border-bottom: 1px solid var(--rule-2); }
+.change { border-bottom: 1px solid var(--rule-2); }
+.change:last-child { border-bottom: 0; }
+.change summary { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; list-style: none; font-size: 13px; }
+.change summary::-webkit-details-marker { display: none; }
+.change summary::before { content: "▸"; color: var(--ink-3); font-size: 10px; width: 8px; flex: none; }
+.change[open] summary::before { content: "▾"; }
+.change .star { width: 13px; height: 13px; flex: none; }
+.change .cname { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); text-align: left; }
+.change .tags { margin-left: auto; display: flex; gap: 5px; flex: none; }
+.tagc { font-size: 11.5px; padding: 0 6px; border-radius: 4px; line-height: 18px; font-variant-numeric: tabular-nums; }
+.tagc.add { color: var(--add); background: color-mix(in srgb, var(--add) 13%, var(--panel)); }
+.tagc.del { color: var(--remove); background: color-mix(in srgb, var(--remove) 13%, var(--panel)); }
+.tagc.meta { color: var(--ink-2); background: var(--sunk); }
+.change ul { margin: 0; padding: 0 10px 8px 34px; font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.change li { margin: 1px 0; }
+.change li.add::marker { content: "+  "; color: var(--add); font-weight: 700; }
+.change li.del::marker { content: "−  "; color: var(--remove); font-weight: 700; }
 .msg.err { color: var(--remove); }
 .msg.pending { color: var(--ink-2); }
 .msg ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; white-space: normal; }
@@ -336,7 +365,7 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
 #btnChat.on { background: var(--sunk); border-color: var(--ink-3); }
 @media (max-width: 1180px) {
   .app.chat-open { grid-template-columns: 300px minmax(0, 1fr); }
-  .app.chat-open .chat { position: fixed; right: 0; top: 0; bottom: 0; width: min(400px, 100vw); z-index: 45; box-shadow: var(--shadow); }
+  .app.chat-open .chat { position: fixed; right: 0; top: 0; bottom: 0; width: min(var(--chat-w, 400px), 100vw); z-index: 45; box-shadow: var(--shadow); }
 }
 
 /* ---------- narrow ---------- */
@@ -443,6 +472,8 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
   </main>
 
   <aside class="chat" id="chat" aria-label="AI 助手">
+    <div class="chat-resize" id="chatResize" role="separator" aria-orientation="vertical" tabindex="0"
+      aria-label="调整 AI 助手的宽度" title="拖动调整宽度，双击恢复默认"></div>
     <div class="chat-head">
       <h2>AI 助手</h2>
       <select id="chatBackend" aria-label="使用哪个 AI"></select>
@@ -1369,7 +1400,7 @@ const CHAT_KEY = "sl-chat";
 const CHAT = { open: false, turns: [], waiting: null, waitingLabel: "", poll: null };
 const CHAT_EXAMPLES = ["把量化、金融相关的仓库都移到 Finance", "FunProjects 太杂了，按主题拆成几个列表",
   "哪些仓库还不在任何列表里？帮我归类", "把 EdgeAI 改名为「🔬 EdgeAI & Compression」"];
-const chatKeep = t => ({ role: t.role, text: t.text, ops: t.ops, warnings: t.warnings, label: t.label, undone: t.undone });
+const chatKeep = t => ({ role: t.role, text: t.text, ops: t.ops, changes: t.changes, warnings: t.warnings, label: t.label, undone: t.undone });
 function loadChat() {
   try {
     const o = JSON.parse(localStorage.getItem(CHAT_KEY) || "null");
@@ -1428,14 +1459,102 @@ function renderChat() {
   $("#chatSend").disabled = !!CHAT.waiting || !st || !st.available;
 }
 
+// A tiny, safe Markdown subset for AI replies: paragraphs, "- " / "1. " lists, **bold**, `code`.
+// Everything becomes DOM text nodes; nothing is parsed as HTML.
+function inlineMd(text) {
+  const out = [], re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(m[1] !== undefined ? h("strong", {}, m[1]) : h("code", {}, m[2]));
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+function mdEl(text) {
+  const box = h("div", { class: "md" });
+  let list = null, para = null;
+  for (const raw of String(text || "").split("\n")) {
+    const line = raw.trimEnd();
+    const item = line.match(/^\s*(?:[-*•]|(\d+)[.)])\s+(.*)$/);
+    if (item) {
+      const tag = item[1] ? "OL" : "UL";
+      if (!list || list.tagName !== tag) { list = h(tag.toLowerCase(), {}); box.append(list); }
+      list.append(h("li", {}, inlineMd(item[2])));
+      para = null;
+      continue;
+    }
+    list = null;
+    if (!line.trim()) { para = null; continue; }
+    if (para) para.append(h("br"), ...inlineMd(line));
+    else { para = h("p", {}, inlineMd(line)); box.append(para); }
+  }
+  return box;
+}
+
+// What one AI answer changed in the draft, grouped per list (from the draft before/after it).
+function draftChanges(beforeJson, afterJson) {
+  const a = JSON.parse(beforeJson), b = JSON.parse(afterJson);
+  const alive = arr => new Map(arr.filter(l => !l.deleted).map(l => [l.key, l]));
+  const A = alive(a.lists), B = alive(b.lists);
+  const nameOf = id => (S.repos.get(id) || {}).full_name || id;
+  const groups = [];
+  for (const [key, l] of B) {
+    const o = A.get(key), was = new Set(o ? o.items : []), now = new Set(l.items);
+    const g = { key, name: l.name, color: l.color, created: !o, renamedFrom: o && o.name !== l.name ? o.name : null,
+                deleted: false, added: l.items.filter(id => !was.has(id)).map(nameOf),
+                removed: o ? o.items.filter(id => !now.has(id)).map(nameOf) : [] };
+    if (g.created || g.renamedFrom || g.added.length || g.removed.length) groups.push(g);
+  }
+  for (const [key, o] of A) if (!B.has(key)) groups.push({ key, name: o.name, color: o.color, created: false, renamedFrom: null, deleted: true, added: [], removed: [] });
+  const ua = new Set(a.unstar || []), ub = new Set(b.unstar || []);
+  return { groups, unstar: [...ub].filter(id => !ua.has(id)).map(nameOf), keep: [...ua].filter(id => !ub.has(id)).map(nameOf) };
+}
+
+function changesEl(c) {
+  const added = c.groups.reduce((n, g) => n + g.added.length, 0), removed = c.groups.reduce((n, g) => n + g.removed.length, 0);
+  const head = [`改动了 ${c.groups.length} 个列表`];
+  if (added) head.push(`加入 ${added}`);
+  if (removed) head.push(`移出 ${removed}`);
+  if (c.unstar.length) head.push(`取消 star ${c.unstar.length}`);
+  if (c.keep.length) head.push(`保留 star ${c.keep.length}`);
+  const open = c.groups.length + (c.unstar.length ? 1 : 0) + (c.keep.length ? 1 : 0) <= 2;
+  const row = (color, title, onGo, tags, items) => h("details", { class: "change", open },
+    h("summary", {}, star(color),
+      onGo ? h("button", { class: "link cname", title: "查看这个列表", onclick: e => { e.preventDefault(); onGo(); } }, title)
+           : h("span", { class: "cname" }, title),
+      h("span", { class: "tags" }, tags)),
+    items.length ? h("ul", {}, items) : null);
+  const rows = c.groups.map(g => {
+    const tags = [], items = [];
+    if (g.created) tags.push(h("span", { class: "tagc meta" }, "新建"));
+    if (g.renamedFrom) { tags.push(h("span", { class: "tagc meta" }, "改名")); items.push(h("li", {}, `原名「${g.renamedFrom}」`)); }
+    if (g.deleted) { tags.push(h("span", { class: "tagc del" }, "删除")); items.push(h("li", {}, "删除这个列表，其中的仓库仍保持 star")); }
+    if (g.added.length) tags.push(h("span", { class: "tagc add" }, `+${g.added.length}`));
+    if (g.removed.length) tags.push(h("span", { class: "tagc del" }, `−${g.removed.length}`));
+    g.added.forEach(n => items.push(h("li", { class: "add" }, n)));
+    g.removed.forEach(n => items.push(h("li", { class: "del" }, n)));
+    const go = !g.deleted ? () => { const l = findList(g.key); if (l && !l.deleted) setView(l.key); } : null;
+    return row(PALETTE[(g.color || 0) % PALETTE.length], g.name, go, tags, items);
+  });
+  if (c.unstar.length) rows.push(row("var(--remove)", "取消 star", () => S.unstar.size && setView("unstar"),
+    [h("span", { class: "tagc del" }, `${c.unstar.length}`)], c.unstar.map(n => h("li", { class: "del" }, n))));
+  if (c.keep.length) rows.push(row("var(--add)", "保留 star", null,
+    [h("span", { class: "tagc add" }, `${c.keep.length}`)], c.keep.map(n => h("li", { class: "add" }, n))));
+  return h("div", { class: "changes" }, h("div", { class: "changes-head" }, head.join(" · ")), rows);
+}
+
 function turnEl(t) {
   if (t.role === "user") return h("div", { class: "msg me" }, t.text);
   if (t.role === "err") return h("div", { class: "msg ai err" }, t.text);
   const canUndo = !!t.after && !t.undone && snapState() === t.after;
-  return h("div", { class: "msg ai" }, t.text,
-    (t.ops || []).length ? h("ul", { class: "done" }, t.ops.map(o => h("li", {}, o))) : null,
+  const hasChanges = t.changes ? (t.changes.groups.length + t.changes.unstar.length + t.changes.keep.length > 0) : (t.ops || []).length > 0;
+  return h("div", { class: "msg ai" }, mdEl(t.text),
+    t.changes ? (hasChanges ? changesEl(t.changes) : null)
+      : (t.ops || []).length ? h("ul", { class: "done" }, t.ops.map(o => h("li", {}, o))) : null,
     (t.warnings || []).length ? h("ul", { class: "skipped" }, t.warnings.map(w => h("li", {}, w))) : null,
-    (t.ops || []).length ? h("div", { class: "turn-foot" }, h("span", {}, t.undone ? "已撤销这一步" : "已写入草稿（还没有写入 GitHub）"),
+    hasChanges ? h("div", { class: "turn-foot" }, h("span", {}, t.undone ? "已撤销这一步" : "已写入草稿（还没有写入 GitHub）"),
       t.undone ? null : h("button", { class: "link undo-turn", disabled: !canUndo,
         title: canUndo ? "撤销 AI 这一步对草稿的修改" : "之后草稿又改过；请用顶部的「撤销」逐步撤回",
         onclick: () => undoTurn(t) }, "撤销这一步")) : null);
@@ -1560,12 +1679,57 @@ function finishChat(res, label) {
   let out = { done: [], skipped: [] };
   const changed = commit(() => { out = applyChatOps(res.operations || []); });
   S.lists.filter(l => !l.id && !l.deleted).forEach(l => rememberColor(l));
+  const after = snapState();
   CHAT.turns.push({ role: "ai", label, text: res.reply || (changed ? "已按你的要求修改了草稿。" : "草稿不需要修改。"),
-    ops: changed ? out.done : [], warnings: [...(res.warnings || []), ...out.skipped],
-    before: changed ? before : null, after: changed ? snapState() : null });
+    ops: changed ? out.done : [], changes: changed ? draftChanges(before, after) : null,
+    warnings: [...(res.warnings || []), ...out.skipped], before: changed ? before : null, after: changed ? after : null });
   saveChat(); renderChat();
   if (changed) toast(`AI 助手修改了草稿（${out.done.length} 处）`);
 }
+
+// The drawer's width: drag its left edge (or focus it and use ←/→); double-click resets. Remembered per browser.
+const CHAT_W_KEY = "sl-chat-width", CHAT_W_DEFAULT = 400;
+function setChatWidth(w, save) {
+  const max = Math.max(320, Math.min(900, window.innerWidth - 420));
+  w = Math.round(Math.min(max, Math.max(300, w)));
+  $("#app").style.setProperty("--chat-w", w + "px");
+  CHAT.width = w;
+  const handle = $("#chatResize");
+  handle.setAttribute("aria-valuenow", String(w));
+  handle.setAttribute("aria-valuemin", "300");
+  handle.setAttribute("aria-valuemax", String(max));
+  if (save) { try { localStorage.setItem(CHAT_W_KEY, String(w)); } catch (_) {} }
+}
+(() => {
+  let saved = CHAT_W_DEFAULT;
+  try { saved = parseInt(localStorage.getItem(CHAT_W_KEY), 10) || CHAT_W_DEFAULT; } catch (_) {}
+  setChatWidth(saved, false);
+  const handle = $("#chatResize");
+  handle.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add("dragging"); document.body.classList.add("resizing");
+  });
+  handle.addEventListener("pointermove", e => {
+    if (handle.hasPointerCapture(e.pointerId)) setChatWidth(window.innerWidth - e.clientX, false);
+  });
+  const stop = e => {
+    if (!handle.hasPointerCapture(e.pointerId)) return;
+    handle.releasePointerCapture(e.pointerId);
+    handle.classList.remove("dragging"); document.body.classList.remove("resizing");
+    setChatWidth(CHAT.width, true);
+  };
+  handle.addEventListener("pointerup", stop);
+  handle.addEventListener("pointercancel", stop);
+  handle.addEventListener("dblclick", () => setChatWidth(CHAT_W_DEFAULT, true));
+  handle.addEventListener("keydown", e => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      setChatWidth(CHAT.width + (e.key === "ArrowLeft" ? 24 : -24), true);
+    }
+  });
+  window.addEventListener("resize", () => setChatWidth(CHAT.width, false));
+})();
 
 $("#btnChat").addEventListener("click", () => toggleChat());
 $("#chatClose").addEventListener("click", () => toggleChat(false));

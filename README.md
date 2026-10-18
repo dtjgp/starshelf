@@ -85,8 +85,14 @@ With `--yes`, a plan that removes stars also needs `--allow-unstar`.
 ## AI assistant
 
 **AI 助手** (AI assistant) opens a chat panel on the right. Tell it what to change in plain words —
-from a single move to a complete new layout; it answers with a short reply and the changes it made
-to your draft, which you can undo step by step. It asks back when a request is unclear.
+from a single move to a complete new layout. It asks back when a request is unclear.
+
+- Each answer is a short note (with **bold** and bullet lists where useful) plus **change cards**:
+  one row per list with `+N` / `−N` tags, new / renamed / deleted lists and the unstar marks; open a
+  row to see which repositories moved, click the list name to jump to it.
+- Every answer is one step in your draft: undo it from the message or with the normal undo.
+- Drag the panel's left edge to make it wider or narrower (or focus the edge and use ← / →;
+  double-click resets it). The width is remembered.
 
 ![AI assistant](docs/screenshots/ai-assistant.png)
 

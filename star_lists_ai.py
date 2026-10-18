@@ -91,7 +91,15 @@ def _name(raw: Any) -> str:
     return _clip(str(raw or ""), NAME_MAX)
 
 
-def _readable(prompt: Prompt, req: Any, notes: str, new_names: Optional[dict[str, str]] = None) -> str:
+def _clip_lines(text: str, n: int) -> str:
+    """Like _clip, but keeps line breaks (the page renders replies as light Markdown)."""
+    lines = [" ".join(line.split()) for line in (text or "").splitlines()]
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def _readable(prompt: Prompt, req: Any, notes: str, new_names: Optional[dict[str, str]] = None,
+              multiline: bool = False) -> str:
     """Replace the prompt's ids (L3, r12, and N1 for lists made in this answer) in the AI's text
     with the real list / repo names. ``req`` is any request with ``.lists``."""
     names = {l.key: l.name for l in req.lists}
@@ -107,7 +115,8 @@ def _readable(prompt: Prompt, req: Any, notes: str, new_names: Optional[dict[str
             return prompt.repo_names.get(prompt.repo_refs[ref], ref)
         return ref
 
-    return _clip(re.sub(r"\b[LrN]\d+\b", sub, notes), 1200)
+    text = re.sub(r"\b[LrN]\d+\b", sub, notes)
+    return _clip_lines(text, 1200) if multiline else _clip(text, 1200)
 
 
 # --------------------------------------------------------------------------- chat ("AI 助手")
@@ -123,8 +132,10 @@ never say a change is already on GitHub.
 
 Every turn you get the current draft lists (ids L1, L2, ...), every repository (ids r1, r2, ...) with the
 lists it is in now, the conversation so far and the person's newest message. Answer with JSON:
-- "reply": in Simplified Chinese, 1-4 short sentences: what you changed, or a question. Call lists and
-  repositories by their names, never by their ids.
+- "reply": in Simplified Chinese, short: what you changed and why, or a question. You may use light
+  Markdown (**bold**, "- " bullet lists, `code`); no headings, tables or links. Do not list every single
+  change: the page shows the applied changes as cards under your reply. Call lists and repositories by
+  their names, never by their ids.
 - "operations": the changes, applied in order. Every operation has all fields "op", "repos" (repository
   ids), "list", "to", "name", "description"; use "" or [] for fields an operation does not use.
   * add: put "repos" into "list".
@@ -296,7 +307,7 @@ def interpret_chat(req: ChatRequest, prompt: Prompt, data: Any) -> dict[str, Any
         warnings.append(f"AI 的回答里有 {unknown} 个无效的仓库编号，已忽略。")
     if skipped:
         warnings.append(f"有 {skipped} 步操作不完整或无效，已跳过。")
-    reply = _readable(prompt, req, str(data.get("reply") or ""), created).strip()
+    reply = _readable(prompt, req, str(data.get("reply") or ""), created, multiline=True)
     if not reply and not ops:
         raise AIError("AI 没有给出回答，请换个说法再试一次。")
     return {"reply": reply, "operations": ops, "warnings": warnings}

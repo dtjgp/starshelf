@@ -38,7 +38,7 @@ def chat_answer(prompt: ai.Prompt) -> dict[str, Any]:
     if "移到" in msg:
         src, dst = refs[1], refs[0]
         moving = [r for r, _, inside in repos if src in inside and dst not in inside][:2]
-        return {"reply": f"已把 2 个仓库从 {src} 移到 {dst}（{moving[0]}）。",
+        return {"reply": f"已把 **2 个仓库** 从 {src} 移到 {dst}：\n- {moving[0]} 更适合 {dst}\n- 另一个也一起移过去了",
                 "operations": [{**blank, "op": "move", "repos": moving, "list": src, "to": dst}]}
     if "新建" in msg:
         loose = [r for r, _, inside in repos if not inside][:2]
