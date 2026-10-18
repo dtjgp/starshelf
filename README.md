@@ -25,8 +25,8 @@ repositories at once — in a local web page, a small macOS app, or from the com
   removed as the very last step. A later restore stars them again (with a new star date).
 - **Optional AI assistant and suggestions.** Chat with an AI in a side panel ("move the quant repos
   to Finance", "split FunProjects into three lists") — each answer edits the draft as one undoable
-  step — or let it propose a whole new layout. AI only ever changes the draft. Backends: your local **Claude Code** or **Codex**
-  CLI (uses that tool's own login / subscription) or the **Anthropic API** (API key).
+  step — or let it propose a whole new layout. AI only ever changes the draft. It runs through your
+  local **Claude Code** or **Codex** CLI and uses that tool's own subscription — no API key, no extra bill.
 
 ![Preview](docs/screenshots/preview.png)
 
@@ -36,8 +36,7 @@ repositories at once — in a local web page, a small macOS app, or from the com
 - A GitHub token with the `user` scope. Easiest: the [GitHub CLI](https://cli.github.com/), logged in
   (`gh auth login`), then `gh auth refresh -h github.com -s user`. Or set `GH_TOKEN`.
 - `pip install pyyaml` — only for the command-line `layout.yaml` workflow.
-- Optional, for AI suggestions: the `claude` (Claude Code) or `codex` CLI, logged in; or
-  `pip install anthropic` plus an Anthropic API key.
+- Optional, for the AI features: the `claude` (Claude Code) or `codex` CLI, logged in with your subscription.
 
 ## Quick start
 
@@ -97,10 +96,10 @@ Both use the backend you pick:
 |---|---|---|
 | Claude Code (default) | `claude -p`, your Claude Code login | Runs with no tools, no MCP servers and no user settings. |
 | Codex | `codex exec`, your Codex/ChatGPT login | Read-only sandbox in an empty folder, but its tools cannot be fully switched off; the page shows a warning. |
-| Anthropic API | `anthropic` package + `ANTHROPIC_API_KEY`, or on macOS the keychain item created by `security add-generic-password -s "Starshelf" -a anthropic-api-key -w` | Billed per use. |
 
-Models can be changed with `STAR_LISTS_CLAUDE_MODEL`, `STAR_LISTS_CODEX_MODEL` and
-`STAR_LISTS_AI_MODEL`.
+Models can be changed with `STAR_LISTS_CLAUDE_MODEL` and `STAR_LISTS_CODEX_MODEL`. Each run counts
+against that tool's subscription usage limits; Starshelf removes API-key variables from the CLI's
+environment so the subscription login is used.
 
 ## Privacy and security
 

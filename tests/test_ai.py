@@ -6,7 +6,6 @@ import os
 import sys
 import tempfile
 import time
-import types
 from pathlib import Path
 from typing import Any
 
@@ -150,92 +149,7 @@ check("nothing placed refused", raises(lambda: ai.interpret(I, PI, {"assignments
 other = ai.interpret(I, PI, {"assignments": [{"repo": iref["R7"], "lists": ["L1"]}], "new_lists": [], "notes": ""})
 check("non-target repo cannot be moved", all("R1" not in e["items"] for e in other["lists"]))
 
-# --------------------------------------------------------------------------- 5. Claude client wiring (fake SDK module)
-calls: list[dict[str, Any]] = []
-
-
-class _Stream:
-    def __init__(self, kw: dict[str, Any], reply: Any) -> None:
-        self.kw, self.reply = kw, reply
-
-    def __enter__(self) -> "_Stream":
-        calls.append(self.kw)
-        return self
-
-    def __exit__(self, *a: Any) -> None:
-        pass
-
-    def get_final_message(self) -> Any:
-        return self.reply
-
-
-def fake_sdk(reply: Any) -> types.ModuleType:
-    mod = types.ModuleType("anthropic")
-    for name in ("AuthenticationError", "PermissionDeniedError", "NotFoundError", "RateLimitError",
-                 "BadRequestError", "APIStatusError", "APIConnectionError"):
-        setattr(mod, name, type(name, (Exception,), {}))
-
-    class Anthropic:
-        def __init__(self, **kw: Any) -> None:
-            self.init = kw
-            self.beta = types.SimpleNamespace(messages=types.SimpleNamespace(stream=lambda **k: _Stream({**k, "init": kw}, reply)))
-    mod.Anthropic = Anthropic
-    return mod
-
-
-def msg(text: str, stop: str = "end_turn") -> Any:
-    return types.SimpleNamespace(stop_reason=stop, model="claude-opus-5-5",
-                                 usage=types.SimpleNamespace(input_tokens=1200, output_tokens=300),
-                                 content=[types.SimpleNamespace(type="thinking", thinking=""),
-                                          types.SimpleNamespace(type="text", text=text)])
-
-
-saved_env = {k: os.environ.pop(k, None) for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "STAR_LISTS_AI_MODEL")}
-saved_mod = sys.modules.get("anthropic")
-try:
-    os.environ["ANTHROPIC_API_KEY"] = "test-key-not-real"
-    sys.modules["anthropic"] = fake_sdk(msg('{"lists": [], "notes": "ok"}'))
-    cs = ai.ClaudeSuggester()
-    check("default model is Claude Opus 5.5", cs.model == "claude-opus-5-5")
-    check("status: available with env key", cs.status()["available"] is True)
-    data, usage = cs.complete(P)
-    kw = calls[-1]
-    check("request asks for JSON schema output", kw["output_config"]["format"] == {"type": "json_schema", "schema": ai.REORG_SCHEMA})
-    check("request sets effort and streams with a large max_tokens", kw["output_config"]["effort"] == "medium" and kw["max_tokens"] >= 32000)
-    check("request opts into server-side fallbacks", kw["betas"] == ["server-side-fallback-2026-07-01"]
-          and kw["extra_body"] == {"fallbacks": "default"})
-    check("request sends the prompt", kw["system"] == P.system and kw["messages"][0]["content"] == P.user)
-    check("env key: SDK resolves credentials itself", kw["init"] == {})
-    check("answer parsed and usage returned", data == {"lists": [], "notes": "ok"} and usage["input_tokens"] == 1200)
-    sys.modules["anthropic"] = fake_sdk(msg("", "refusal"))
-    check("refusal reported in Chinese", raises(lambda: cs.complete(P), "拒绝"))
-    sys.modules["anthropic"] = fake_sdk(msg('{"lists": [', "max_tokens"))
-    check("truncation reported", raises(lambda: cs.complete(P), "截断"))
-    sys.modules["anthropic"] = fake_sdk(msg("not json"))
-    check("invalid JSON reported", raises(lambda: cs.complete(P), "JSON"))
-    os.environ["STAR_LISTS_AI_MODEL"] = "claude-sonnet-5-5"
-    check("model override via env", ai.ClaudeSuggester().model == "claude-sonnet-5-5"
-          and ai.ClaudeSuggester("x-model").model == "x-model")
-    del os.environ["ANTHROPIC_API_KEY"]
-    if sys.platform == "darwin" and ai._keychain(read=False):
-        print("SKIP  keychain-missing checks (a real keychain item exists)")
-    else:
-        check("status: missing key explains setup", cs.status()["available"] is False
-              and any("security add-generic-password" in s for s in cs.status()["setup"]))
-    sys.modules["anthropic"] = None  # type: ignore[assignment]  # makes `import anthropic` fail
-    st = cs.status()
-    check("status: missing SDK explains pip install", st["available"] is False and "pip install anthropic" in " ".join(st["setup"]))
-finally:
-    for k, v in saved_env.items():
-        os.environ.pop(k, None)
-        if v is not None:
-            os.environ[k] = v
-    if saved_mod is not None:
-        sys.modules["anthropic"] = saved_mod
-    else:
-        sys.modules.pop("anthropic", None)
-
-# --------------------------------------------------------------------------- 6. CLI backends (fake claude / codex executables)
+# --------------------------------------------------------------------------- 5. CLI backends (fake claude / codex executables)
 bindir = Path(tempfile.mkdtemp(prefix="sl_bin_"))
 LOG = bindir / "calls.jsonl"
 FAKE_CLAUDE = f"""#!{sys.executable}
@@ -345,14 +259,14 @@ try:
     os.environ.pop("CLAUDE_CODE_SESSION_ID"); os.environ.pop("CLAUDECODE")
     check("parent Claude session variables are not passed on", "CLAUDE_CODE_SESSION_ID" not in env and "CLAUDECODE" not in env
           and "ANTHROPIC_API_KEY" not in env)
-    check("default order: Claude Code, Codex, API", [b.id for b in ai.default_backends()] == ["claude-code", "codex", "api"])
+    check("only subscription backends: Claude Code, then Codex", [b.id for b in ai.default_backends()] == ["claude-code", "codex"])
 finally:
     for k, v in saved_env.items():
         os.environ.pop(k, None)
         if v is not None:
             os.environ[k] = v
 
-# --------------------------------------------------------------------------- 7. /api/suggest in the app
+# --------------------------------------------------------------------------- 6. /api/suggest in the app
 work = Path(tempfile.mkdtemp(prefix="sl_ai_"))
 fake = FakeSuggester(delay=0.2)
 other = FakeSuggester(id="other", label="Other")
@@ -401,12 +315,12 @@ try:
     app.start_suggest({"mode": "incremental", "lists": DRAFT, "backend": "fake"})
     ok = False
 except ai.AIError as exc:
-    ok = "API key" in str(exc) and "security" in str(exc)
+    ok = "还没有登录" in str(exc) and "claude" in str(exc)
 check("unavailable AI refuses to start with setup help", ok)
 fake.available = True
 check("nothing was written to the data folder", not any(work.iterdir()))
 
-# --------------------------------------------------------------------------- 8. AI assistant chat
+# --------------------------------------------------------------------------- 7. AI assistant chat
 def chat_req(message: str = "hi", **kw: Any) -> ai.ChatRequest:
     return ai.parse_chat({"lists": DRAFT, "message": message, **kw}, BASE)
 

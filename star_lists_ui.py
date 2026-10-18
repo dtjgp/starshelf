@@ -687,8 +687,6 @@ def main(argv: Optional[list[str]] = None, client: Optional[sl.Client] = None) -
                     help="shut down when the launching process exits (used by the macOS app)")
     ap.add_argument("--sleep", type=float, default=1.0, help="seconds between GitHub writes (default 1.0)")
     ap.add_argument("--settle", type=float, default=2.0, help=argparse.SUPPRESS)
-    ap.add_argument("--ai-model", default=None,
-                    help=f"model for the Anthropic API backend (default: $STAR_LISTS_AI_MODEL or {ai.DEFAULT_MODEL})")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = ap.parse_args(argv)
     try:
@@ -704,7 +702,7 @@ def main(argv: Optional[list[str]] = None, client: Optional[sl.Client] = None) -
             return 0
         client = client or sl.GitHubClient(sl.resolve_token())
         app = App(client, workdir, sleep=args.sleep, settle=args.settle,
-                  suggesters=ai.default_backends(args.ai_model))
+                  suggesters=ai.default_backends())
         server = build_server(app, args.port)
     except sl.StarListsError as exc:
         print(f"error: {exc}", file=sys.stderr)
