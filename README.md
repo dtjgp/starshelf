@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="128" alt="Starshelf icon">
+
 # starshelf
 
 **English** · [简体中文](README.zh-CN.md)
