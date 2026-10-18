@@ -362,6 +362,18 @@ body.resizing { cursor: col-resize; user-select: none; }
 .chat-foot { border-top: 1px solid var(--rule-2); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .chat-foot textarea { width: 100%; resize: none; min-height: 64px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--sunk); color: var(--ink); font-size: 14px; }
 .chat-row { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--ink-3); }
+.chat-divider { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 12px; margin: 2px 0; white-space: nowrap; }
+.chat-divider::before, .chat-divider::after { content: ""; flex: 1; border-top: 1px dashed var(--rule); }
+.msg.old { opacity: .62; }
+.hist-bar { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.hist-bar b { color: var(--ink); }
+.hist-list { display: flex; flex-direction: column; gap: 8px; }
+.hist-item { text-align: left; padding: 9px 11px; border: 1px solid var(--rule-2); border-radius: 8px; background: var(--panel); display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.hist-item:hover { border-color: var(--ink-3); }
+.hist-item .when { font-weight: 600; }
+.hist-item .sum, .hist-item .first { color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat.viewing-history .chat-foot { display: none; }
+#chatHistory.on { background: var(--sunk); }
 #btnChat.on { background: var(--sunk); border-color: var(--ink-3); }
 @media (max-width: 1180px) {
   .app.chat-open { grid-template-columns: 300px minmax(0, 1fr); }
@@ -477,7 +489,8 @@ body.resizing { cursor: col-resize; user-select: none; }
     <div class="chat-head">
       <h2>AI 助手</h2>
       <select id="chatBackend" aria-label="使用哪个 AI"></select>
-      <button id="chatClear" class="ghost small" title="清空这段对话">清空</button>
+      <button id="chatNew" class="ghost small" title="开始新话题：之前的消息仍可翻看，但不再发给 AI">新对话</button>
+      <button id="chatHistory" class="ghost small" title="查看已存档的对话（只读）">历史</button>
       <button id="chatClose" class="ghost small" aria-label="关闭 AI 助手">×</button>
     </div>
     <div class="chat-note" id="chatNote"></div>
@@ -485,7 +498,7 @@ body.resizing { cursor: col-resize; user-select: none; }
     <form class="chat-foot" id="chatForm">
       <textarea id="chatInput" rows="3" maxlength="2000" aria-label="对 AI 说的话"
         placeholder="例如：把量化金融相关的仓库都移到 Finance"></textarea>
-      <div class="chat-row"><span>Enter 发送，Shift+Enter 换行</span><span class="spacer"></span>
+      <div class="chat-row"><span id="chatContext"></span><span class="spacer"></span><span>Enter 发送</span>
         <button type="submit" class="primary" id="chatSend">发送</button></div>
     </form>
   </aside>
@@ -621,6 +634,7 @@ function setBaseline(b) {
   S.newSeq = 1; S.undo = []; S.redo = []; S.sel.clear(); S.anchor = null; S.unstar = new Set();
   if (!SPECIAL.has(S.view) && !findList(S.view)) S.view = "all";
   fillLanguages();
+  if (CHAT.fetchedAt) { rolloverChat(); renderChat(); }   // not on first load: loadChat() handles that
 }
 const serializeLists = () => S.lists.map(l => ({ key: l.key, id: l.id, name: l.name, description: l.description, private: l.private, deleted: l.deleted, color: l.color, items: [...l.items] }));
 function loadLists(arr) {
@@ -1396,19 +1410,65 @@ function rememberBackend(id) { try { localStorage.setItem(BACKEND_KEY, id); } ca
 // ------------------------------------------------------------------ AI assistant (chat drawer)
 // Each turn sends the conversation and the current draft; the AI answers with a reply and a list
 // of operations, which are applied to the draft as one undoable edit. Nothing here writes to GitHub.
-const CHAT_KEY = "sl-chat";
-const CHAT = { open: false, turns: [], waiting: null, waitingLabel: "", poll: null };
+// The panel shows the current conversation; 「新对话」 inserts a divider, and only messages after the last
+// divider are sent to the AI. When the GitHub state is read again (after an apply or 「重新读取」) the whole
+// conversation is archived into a read-only history (newest 10, kept in this browser only).
+const CHAT_KEY = "sl-chat", CHAT_HIST_KEY = "sl-chat-history", CHAT_HIST_MAX = 10, CHAT_CONTEXT = 12;
+const CHAT = { open: false, turns: [], fetchedAt: null, waiting: null, waitingLabel: "", poll: null,
+               view: "current", archived: [], confirmClear: false };
 const CHAT_EXAMPLES = ["把量化、金融相关的仓库都移到 Finance", "FunProjects 太杂了，按主题拆成几个列表",
   "哪些仓库还不在任何列表里？帮我归类", "把 EdgeAI 改名为「🔬 EdgeAI & Compression」"];
-const chatKeep = t => ({ role: t.role, text: t.text, ops: t.ops, changes: t.changes, warnings: t.warnings, label: t.label, undone: t.undone });
+const chatKeep = t => ({ role: t.role, text: t.text, ops: t.ops, changes: t.changes, warnings: t.warnings,
+                         label: t.label, undone: t.undone, at: t.at });
+const isMessage = t => t.role === "user" || t.role === "ai";
+const nowIso = () => new Date().toISOString();
 function loadChat() {
   try {
     const o = JSON.parse(localStorage.getItem(CHAT_KEY) || "null");
-    CHAT.turns = o && o.fetchedAt === S.fetchedAt && Array.isArray(o.turns) ? o.turns.map(chatKeep) : [];
-  } catch (_) { CHAT.turns = []; }
+    CHAT.turns = o && Array.isArray(o.turns) ? o.turns.map(chatKeep) : [];
+    CHAT.fetchedAt = o ? o.fetchedAt || null : null;
+  } catch (_) { CHAT.turns = []; CHAT.fetchedAt = null; }
+  try {
+    const list = JSON.parse(localStorage.getItem(CHAT_HIST_KEY) || "[]");
+    CHAT.archived = Array.isArray(list) ? list : [];
+  } catch (_) { CHAT.archived = []; }
+  rolloverChat();
 }
 function saveChat() {
-  try { localStorage.setItem(CHAT_KEY, JSON.stringify({ fetchedAt: S.fetchedAt, turns: CHAT.turns.slice(-40).map(chatKeep) })); } catch (_) {}
+  try { localStorage.setItem(CHAT_KEY, JSON.stringify({ fetchedAt: S.fetchedAt, turns: CHAT.turns.slice(-60).map(chatKeep) })); } catch (_) {}
+}
+function saveHistory() {
+  let list = CHAT.archived.slice(0, CHAT_HIST_MAX);
+  for (;;) {  // if storage is full, drop the oldest archived conversations
+    try { localStorage.setItem(CHAT_HIST_KEY, JSON.stringify(list)); break; }
+    catch (_) { if (!list.length) break; list = list.slice(0, -1); }
+  }
+  CHAT.archived = list;
+}
+function archiveChat() {
+  const turns = CHAT.turns.map(chatKeep), msgs = turns.filter(isMessage);
+  if (!msgs.length) return;
+  CHAT.archived.unshift({ id: Date.now(), start: msgs[0].at || null, end: msgs[msgs.length - 1].at || null, turns });
+  saveHistory();
+}
+// The draft and the AI's view of it start over whenever GitHub is read again: archive the old talk.
+function rolloverChat() {
+  if (CHAT.fetchedAt && CHAT.fetchedAt !== S.fetchedAt) {
+    archiveChat();
+    CHAT.turns = [];
+  }
+  CHAT.fetchedAt = S.fetchedAt;
+  saveChat();
+}
+const lastDivider = () => CHAT.turns.map(t => t.role).lastIndexOf("divider");
+const currentSegment = () => CHAT.turns.slice(lastDivider() + 1);
+function newConversation() {
+  const last = CHAT.turns[CHAT.turns.length - 1];
+  if (CHAT.waiting || !CHAT.turns.some(isMessage) || (last && last.role === "divider")) return;
+  CHAT.turns.push({ role: "divider", at: nowIso() });
+  CHAT.view = "current";
+  saveChat(); renderChat();
+  $("#chatInput").focus();
 }
 
 async function toggleChat(open) {
@@ -1448,15 +1508,82 @@ function renderChat() {
   else if (st.warning) note.append(h("div", { class: "warn" }, h("b", {}, "安全提示："), st.warning));
   const log = $("#chatLog");
   log.replaceChildren();
+  const inHistory = CHAT.view !== "current";
+  $("#chat").classList.toggle("viewing-history", inHistory);
+  $("#chatHistory").classList.toggle("on", inHistory);
+  $("#chatNew").disabled = !!CHAT.waiting || !CHAT.turns.some(isMessage) || (CHAT.turns[CHAT.turns.length - 1] || {}).role === "divider";
+  if (inHistory) { renderHistory(log); return; }
   if (!CHAT.turns.length && !CHAT.waiting) {
     log.append(h("div", { class: "chat-empty" }, "告诉 AI 你想怎么整理，例如：",
       h("ul", {}, CHAT_EXAMPLES.map(e => h("li", {}, h("button", { class: "link", onclick: () => { $("#chatInput").value = e; $("#chatInput").focus(); } }, e)))),
-      "AI 的修改只进入草稿，每一步都可以撤销；写入 GitHub 仍需「预览修改」。"));
+      "AI 的修改只进入草稿，每一步都可以撤销；写入 GitHub 仍需「预览修改」。",
+      CHAT.archived.length ? h("p", {}, "之前的对话已存入「历史」，可以随时查看。") : null));
   }
-  CHAT.turns.forEach((t, i) => log.append(turnEl(t, i)));
+  const cut = lastDivider();
+  CHAT.turns.forEach((t, i) => log.append(t.role === "divider"
+    ? h("div", { class: "chat-divider" }, `新对话 · ${fmtTime(t.at)}`)
+    : turnEl(t, { old: i < cut })));
   if (CHAT.waiting) log.append(h("div", { class: "msg ai pending", id: "chatPending" }, `${CHAT.waitingLabel || "AI"} 正在思考…`));
   log.scrollTop = log.scrollHeight;
+  const seg = currentSegment().filter(isMessage).length;
+  $("#chatContext").textContent = !CHAT.turns.some(isMessage) ? ""
+    : seg === 0 ? "新对话：之前的消息不会发给 AI"
+    : `AI 参考本次对话最近 ${Math.min(seg, CHAT_CONTEXT)} 条消息` + (seg > CHAT_CONTEXT ? `（更早的 ${seg - CHAT_CONTEXT} 条不再参考）` : "");
   $("#chatSend").disabled = !!CHAT.waiting || !st || !st.available;
+}
+
+function historySummary(a) {
+  const msgs = a.turns.filter(isMessage);
+  let added = 0, removed = 0, unstar = 0;
+  for (const t of a.turns) {
+    if (!t.changes || t.undone) continue;
+    t.changes.groups.forEach(g => { added += g.added.length; removed += g.removed.length; });
+    unstar += t.changes.unstar.length;
+  }
+  const bits = [`${msgs.length} 条消息`];
+  if (added) bits.push(`加入 ${added}`);
+  if (removed) bits.push(`移出 ${removed}`);
+  if (unstar) bits.push(`取消 star ${unstar}`);
+  return bits.join(" · ");
+}
+const historyWhen = a => a.start ? fmtTime(a.start) + (a.end && a.end !== a.start ? ` – ${fmtTime(a.end)}` : "") : "时间未知";
+
+function renderHistory(log) {
+  const back = (label, to) => h("button", { class: "link", onclick: () => { CHAT.view = to; CHAT.confirmClear = false; renderChat(); } }, label);
+  if (CHAT.view === "history") {
+    log.append(h("div", { class: "hist-bar" }, h("b", {}, "历史记录"), h("span", { class: "muted" }, "（只读，仅保存在本机浏览器）"),
+      h("span", { class: "spacer" }), back("返回当前对话", "current")));
+    if (!CHAT.archived.length) {
+      log.append(h("p", { class: "chat-empty" }, "还没有存档的对话。应用到 GitHub 或「重新读取」后，当时的对话会存到这里。"));
+    } else {
+      log.append(h("div", { class: "hist-list" }, CHAT.archived.map(a => {
+        const first = a.turns.find(t => t.role === "user");
+        return h("button", { class: "hist-item", onclick: () => { CHAT.view = a.id; renderChat(); } },
+          h("span", { class: "when" }, historyWhen(a)), h("span", { class: "sum" }, historySummary(a)),
+          first ? h("span", { class: "first" }, `「${first.text}」`) : null);
+      })));
+    }
+    if (CHAT.archived.length || CHAT.turns.length) {
+      log.append(h("button", { class: "ghost danger small", id: "chatClearAll", onclick: clearAllChat },
+        CHAT.confirmClear ? "确认清除？当前对话和全部历史都会删除" : "清除全部记录"));
+    }
+    log.scrollTop = 0;
+    return;
+  }
+  const a = CHAT.archived.find(x => x.id === CHAT.view);
+  if (!a) { CHAT.view = "history"; renderHistory(log); return; }
+  log.append(h("div", { class: "hist-bar" }, h("b", {}, historyWhen(a)), h("span", { class: "spacer" }), back("返回列表", "history")));
+  a.turns.forEach(t => log.append(t.role === "divider"
+    ? h("div", { class: "chat-divider" }, `新对话 · ${fmtTime(t.at)}`)
+    : turnEl(t, { readOnly: true })));
+  log.scrollTop = 0;
+}
+
+function clearAllChat() {
+  if (!CHAT.confirmClear) { CHAT.confirmClear = true; renderChat(); return; }
+  CHAT.turns = []; CHAT.archived = []; CHAT.confirmClear = false; CHAT.view = "current";
+  saveChat(); saveHistory(); renderChat();
+  toast("已清除全部对话记录", false);
 }
 
 // A tiny, safe Markdown subset for AI replies: paragraphs, "- " / "1. " lists, **bold**, `code`.
@@ -1545,15 +1672,17 @@ function changesEl(c) {
   return h("div", { class: "changes" }, h("div", { class: "changes-head" }, head.join(" · ")), rows);
 }
 
-function turnEl(t) {
-  if (t.role === "user") return h("div", { class: "msg me" }, t.text);
-  if (t.role === "err") return h("div", { class: "msg ai err" }, t.text);
-  const canUndo = !!t.after && !t.undone && snapState() === t.after;
+function turnEl(t, opts = {}) {
+  const old = opts.old ? " old" : "";
+  if (t.role === "user") return h("div", { class: "msg me" + old }, t.text);
+  if (t.role === "err") return h("div", { class: "msg ai err" + old }, t.text);
+  const canUndo = !opts.readOnly && !!t.after && !t.undone && snapState() === t.after;
   const hasChanges = t.changes ? (t.changes.groups.length + t.changes.unstar.length + t.changes.keep.length > 0) : (t.ops || []).length > 0;
-  return h("div", { class: "msg ai" }, mdEl(t.text),
+  return h("div", { class: "msg ai" + old }, mdEl(t.text),
     t.changes ? (hasChanges ? changesEl(t.changes) : null)
       : (t.ops || []).length ? h("ul", { class: "done" }, t.ops.map(o => h("li", {}, o))) : null,
     (t.warnings || []).length ? h("ul", { class: "skipped" }, t.warnings.map(w => h("li", {}, w))) : null,
+    hasChanges && opts.readOnly ? h("div", { class: "turn-foot" }, h("span", {}, t.undone ? "当时撤销了这一步" : "当时写入了草稿")) :
     hasChanges ? h("div", { class: "turn-foot" }, h("span", {}, t.undone ? "已撤销这一步" : "已写入草稿（还没有写入 GitHub）"),
       t.undone ? null : h("button", { class: "link undo-turn", disabled: !canUndo,
         title: canUndo ? "撤销 AI 这一步对草稿的修改" : "之后草稿又改过；请用顶部的「撤销」逐步撤回",
@@ -1572,13 +1701,14 @@ async function sendChat() {
   const input = $("#chatInput");
   const text = input.value.trim();
   if (!text || CHAT.waiting) return;
-  const history = CHAT.turns.filter(t => t.role !== "err").slice(-12).map(t => ({
+  const history = currentSegment().filter(isMessage).slice(-CHAT_CONTEXT).map(t => ({
     role: t.role === "user" ? "user" : "assistant",
     text: t.role === "ai" && (t.ops || []).length ? `${t.text}\n（已改草稿：${t.ops.join("；")}${t.undone ? "；随后被撤销" : ""}）` : t.text,
   }));
   const body = { message: text, history, backend: AI.form.backend, unstar: [...S.unstar],
     lists: alive().map(l => ({ key: l.key, name: l.name.trim(), description: l.description, items: [...l.items] })) };
-  CHAT.turns.push({ role: "user", text });
+  CHAT.view = "current";
+  CHAT.turns.push({ role: "user", text, at: nowIso() });
   input.value = "";
   saveChat();
   try {
@@ -1586,7 +1716,7 @@ async function sendChat() {
     CHAT.waiting = j.id; CHAT.waitingLabel = j.label;
     renderChat(); pollChat();
   } catch (err) {
-    CHAT.turns.push({ role: "err", text: err.message });
+    CHAT.turns.push({ role: "err", text: err.message, at: nowIso() });
     saveChat(); renderChat();
   }
 }
@@ -1605,7 +1735,7 @@ function pollChat() {
     clearInterval(CHAT.poll); CHAT.waiting = null;
     if (j.ai) AI.status = j.ai;
     if (j.status === "done") finishChat(j.result, j.label);
-    else { CHAT.turns.push({ role: "err", text: j.error || "出现了未知错误。" }); saveChat(); renderChat(); }
+    else { CHAT.turns.push({ role: "err", text: j.error || "出现了未知错误。", at: nowIso() }); saveChat(); renderChat(); }
   }, 1000);
 }
 
@@ -1680,7 +1810,7 @@ function finishChat(res, label) {
   const changed = commit(() => { out = applyChatOps(res.operations || []); });
   S.lists.filter(l => !l.id && !l.deleted).forEach(l => rememberColor(l));
   const after = snapState();
-  CHAT.turns.push({ role: "ai", label, text: res.reply || (changed ? "已按你的要求修改了草稿。" : "草稿不需要修改。"),
+  CHAT.turns.push({ role: "ai", label, at: nowIso(), text: res.reply || (changed ? "已按你的要求修改了草稿。" : "草稿不需要修改。"),
     ops: changed ? out.done : [], changes: changed ? draftChanges(before, after) : null,
     warnings: [...(res.warnings || []), ...out.skipped], before: changed ? before : null, after: changed ? after : null });
   saveChat(); renderChat();
@@ -1733,7 +1863,12 @@ function setChatWidth(w, save) {
 
 $("#btnChat").addEventListener("click", () => toggleChat());
 $("#chatClose").addEventListener("click", () => toggleChat(false));
-$("#chatClear").addEventListener("click", () => { CHAT.turns = []; saveChat(); renderChat(); });
+$("#chatNew").addEventListener("click", newConversation);
+$("#chatHistory").addEventListener("click", () => {
+  CHAT.view = CHAT.view === "current" ? "history" : "current";
+  CHAT.confirmClear = false;
+  renderChat();
+});
 $("#chatBackend").addEventListener("change", e => { AI.form.backend = e.target.value; rememberBackend(AI.form.backend); renderChat(); });
 $("#chatForm").addEventListener("submit", e => { e.preventDefault(); sendChat(); });
 $("#chatInput").addEventListener("keydown", e => {

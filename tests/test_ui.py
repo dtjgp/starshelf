@@ -434,11 +434,53 @@ with sync_playwright() as p:
     check("panel width remembered after reload", chat_w() == w2, str(chat_w()))
     page.locator("#chatResize").dblclick()
     check("double-click restores the default width", chat_w() == 400, str(chat_w()))
-    page.click("#chatClear")
-    check("clear empties the conversation", page.locator("#chatLog .msg").count() == 0)
+    # 「新对话」: a divider; earlier messages stay visible (dimmed) but are no longer sent to the AI
+    msgs = page.locator("#chatLog .msg:not(.pending)")
+    page.click("#chatNew")
+    check("新对话 adds a divider and dims earlier messages", page.locator("#chatLog .chat-divider").count() == 1
+          and page.locator("#chatLog .msg.old").count() == 8 and "新对话" in page.locator("#chatContext").inner_text())
+    check("新对话 is disabled right after a divider", page.locator("#chatNew").is_disabled())
+    page.fill("#chatInput", "怎么移？")
+    page.keyboard.press("Enter")
+    expect(msgs).to_have_count(10, timeout=15000)
+    check("messages before the divider are not sent to the AI", "Conversation so far" not in fake.calls[-1].user,
+          fake.calls[-1].user[-300:])
+    check("context note counts only the new conversation", "最近 2 条消息" in page.locator("#chatContext").inner_text(),
+          page.locator("#chatContext").inner_text())
+    # rereading GitHub archives the conversation into the read-only history
+    page.click("#chatClose")
+    page.click("#btnDiscard")
+    page.click("#btnRefresh")
+    expect(page.locator("#toast")).to_contain_text("重新读取", timeout=10000)
+    page.click("#btnChat")
+    check("rereading GitHub archives the conversation", page.locator("#chatLog .msg").count() == 0
+          and "历史" in page.locator("#chatLog .chat-empty").inner_text())
+    page.click("#chatHistory")
+    items = page.locator("#chatLog .hist-item")
+    check("history lists the archived conversation", items.count() == 1 and "10 条消息" in items.first.inner_text(),
+          items.first.inner_text() if items.count() else "none")
+    items.first.click()
+    check("an archived conversation is read-only", page.locator("#chatLog .msg").count() == 10
+          and page.locator("#chatLog .undo-turn").count() == 0 and page.locator("#chatLog .chat-divider").count() == 1
+          and page.locator("#chatForm").is_hidden())
+    page.screenshot(path=str(OUT / "17-ai-history.png"))
+    page.locator("#chatLog .hist-bar button", has_text="返回列表").click()
+    page.reload()
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+    page.click("#btnChat")
+    page.click("#chatHistory")
+    check("history survives a reload", items.count() == 1)
+    page.click("#chatClearAll")
+    check("clearing everything asks for a second click", "确认清除" in page.locator("#chatClearAll").inner_text()
+          and items.count() == 1)
+    page.click("#chatClearAll")
+    check("clear all empties the conversation", page.locator("#chatLog .msg").count() == 0
+          and page.locator("#chatForm").is_visible())
+    page.click("#chatHistory")
+    check("history is empty after clearing", "还没有存档" in page.locator("#chatLog").inner_text())
+    page.click("#chatHistory")
     page.click("#chatClose")
     check("close hides the drawer", page.locator("#chat").is_hidden())
-    page.click("#btnDiscard")
     check("AI assistant never writes to GitHub", g.mutations == muts)
     check("no JS errors", not errors, "\n".join(errors[:10]))
 
