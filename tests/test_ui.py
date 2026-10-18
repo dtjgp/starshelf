@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import http.client
 import json
-import re
 import sys
 import tempfile
 import threading
@@ -102,7 +101,7 @@ with sync_playwright() as p:
     check("select all visible", page.locator("#countLabel").inner_text() == f"已选 {len(paper_hits)} 个")
     page.click("#bAdd")
     page.locator("#popover .opt", has_text="Research & Writing").click()
-    check("bulk add updates list count", new_item.locator(".n").inner_text() == str(len(paper_hits)))
+    check("bulk add updates list count", new_item.locator(".n").text_content() == str(len(paper_hits)))
     page.screenshot(path=str(OUT / "03-bulk-added.png"))
     page.fill("#q", "")
     page.click("#bDeselect")
@@ -257,101 +256,51 @@ with sync_playwright() as p:
           f'{len(L["EdgeAI"])}')
     check("no stars lost overall", g.view()["starred"] == initial["starred"])
 
-    # -- AI suggestions (fake Claude): only the draft changes, never GitHub
-    muts = g.mutations
+    # -- AI backends in the assistant panel: setup help, backend picker, Codex warning
+    check("the 「AI 建议」 button and dialog are gone", page.locator("#btnAI").count() == 0
+          and page.locator("#aiDialog").count() == 0)
     fake.available = fake_codex.available = False
-    page.click("#btnAI")
-    expect(page.locator("#aiBody .errors")).to_contain_text("还没有登录", timeout=10000)
-    check("AI unavailable: setup shown, start disabled", page.locator("#aiGo").is_disabled()
-          and "claude" in page.locator("#aiBody .setup").inner_text())
-    page.locator("#aiActions button", has_text="取消").click()
+    page.click("#btnChat")
+    expect(page.locator("#chatNote .warn")).to_contain_text("还没有登录", timeout=10000)
+    check("AI unavailable: setup shown, send disabled", page.locator("#chatSend").is_disabled()
+          and "claude" in page.locator("#chatNote .setup").inner_text())
     fake.available = fake_codex.available = True
-    page.click("#btnAI")
-    expect(page.locator("#aiGo")).to_be_visible(timeout=10000)
-    check("backend picker lists both, Claude Code first", page.locator("#aiBackend option").all_inner_texts() == ["Claude Code", "Codex"]
-          and page.locator("#aiBackend").input_value() == "claude-code" and page.locator("#aiWarn").count() == 0)
-    page.select_option("#aiBackend", "codex")
-    check("Codex shows the security warning", "读取你电脑上的文件" in page.locator("#aiWarn").inner_text()
-          and "OpenAI" in page.locator("#aiBody .foot").inner_text())
+    page.reload()  # the page caches the backend status until it is reloaded
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+    page.click("#btnChat")
+    expect(page.locator("#chatBackend option").first).to_have_text("Claude Code", timeout=10000)
+    check("backend picker lists both, Claude Code first", page.locator("#chatBackend option").all_inner_texts() == ["Claude Code", "Codex"]
+          and page.locator("#chatBackend").input_value() == "claude-code" and page.locator("#chatNote .warn").count() == 0)
+    page.select_option("#chatBackend", "codex")
+    check("Codex shows the security warning", "读取你电脑上的文件" in page.locator("#chatNote").inner_text())
     page.screenshot(path=str(OUT / "12-ai-codex-warning.png"))
-    page.select_option("#aiBackend", "claude-code")
-    check("switching back hides the warning", page.locator("#aiWarn").count() == 0)
-    check("incremental with no unlisted repos is disabled", page.locator("#aiGo").is_disabled())
-    page.locator("input[name=aimode][value=reorganize]").check()
-    page.fill("#aiInstr", "按用途分")
-    check("reorganize counts every repo", "321 个仓库" in page.locator("#aiGo").inner_text(), page.locator("#aiGo").inner_text())
-    fake.delay = 1.5
-    page.click("#aiGo")
-    expect(page.locator("#aiBody h2")).to_have_text("Claude Code 正在整理…", timeout=10000)
-    check("AI button shows progress", page.locator("#btnAI").inner_text() == "AI 生成中…")
-    page.locator("#aiActions button", has_text="在后台继续").click()
-    expect(page.locator("#aiBody h2")).to_have_text("AI 建议的新列表", timeout=15000)  # pops up again when ready
-    summary = page.locator("#aiSummary").inner_text()
-    n_del = int(re.search(r"删除 (\d+) 个", summary)[1]) if re.search(r"删除 (\d+) 个", summary) else 0
-    check("AI summary counts", "新建 1 个列表" in summary and "改名 1 个" in summary and n_del >= 1
-          and page.locator("#aiBody .ai-row.doomed").count() == n_del, summary)
-    check("AI notes and warnings shown", "假的建议" in page.locator("#aiBody .ai-notes").inner_text()
-          and "没有归类" in page.locator("#aiBody .notes").inner_text())
-    check("instructions reached the prompt (chosen backend)", "按用途分" in fake.calls[-1].user and not fake_codex.calls)
-    check("draft untouched before accepting", page.locator("#changeCount").inner_text() == "0")
-    page.screenshot(path=str(OUT / "11-ai-result.png"))
-    page.click("#aiAccept")
-    check("AI proposal accepted into the draft", int(page.locator("#changeCount").inner_text()) > 0
-          and page.locator("#lists .litem", has_text="AI New").count() == 1
-          and page.locator("#lists .litem", has_text="Renamed by AI").count() == 1
-          and page.locator("#lists .litem.doomed").count() == n_del)
-    page.click("#toastUndo")
-    check("one undo reverts the whole AI change", page.locator("#changeCount").inner_text() == "0"
-          and page.locator("#lists .litem", has_text="AI New").count() == 0)
-    page.click("#btnRedo")
-    page.click("#btnReview")
-    expect(page.locator("#rvBody h2")).to_have_text("确认要写入 GitHub 的修改", timeout=15000)
-    check("AI draft gives a valid plan", page.locator("#rvBody .errors").count() == 0
-          and "新建 1 个列表" in page.locator("#rvBody .lead").inner_text(), page.locator("#rvBody").inner_text()[:600])
-    page.locator("#rvActions button", has_text="取消").click()
-    page.click("#btnDiscard")
+    page.select_option("#chatBackend", "claude-code")
+    check("switching back hides the warning", page.locator("#chatNote .warn").count() == 0)
+    page.click("#chatClose")
 
-    page.locator("#lists .litem", has_text="Finance").locator("[data-act=view]").click()
-    page.check("#selAll")
-    nsel = len(initial["lists"]["Finance"])
-    fin_before = page.locator("#lists .litem", has_text="Finance").locator(".n").inner_text()
-    page.click("#btnAI")
-    page.locator("input[name=aimode][value=incremental]").check()
-    check("selection becomes the default scope", page.locator("#aiScope").input_value() == "sel"
-          and f"{nsel} 个仓库" in page.locator("#aiGo").inner_text(), page.locator("#aiGo").inner_text())
-    fake.delay = 0
-    page.click("#aiGo")
-    expect(page.locator("#aiBody h2")).to_have_text("AI 建议的归类", timeout=15000)
-    page.click("#aiAccept")
-    bucket = page.locator("#lists .litem", has_text="AI Bucket")
-    check("incremental adds a new list and keeps existing members", bucket.count() == 1
-          and bucket.locator(".n").inner_text() == str(nsel - 1)
-          and page.locator("#lists .litem", has_text="Finance").locator(".n").inner_text() == fin_before)
-    page.click("#btnDiscard")
-    check("GitHub untouched by AI", g.mutations == muts)
     # -- unstar: draft mark -> preview checkbox -> applied last -> restore stars again
     names = {r.id: r.full_name for r in app.baseline.repos.values()}
     starred_before = g.view()["starred"]
     fin = page.locator("#lists .litem", has_text="Finance")
     fin.locator("[data-act=view]").click()
-    fin_n = int(fin.locator(".n").inner_text())
+    fin_n = int(fin.locator(".n").text_content())
     ids = [rows.nth(i).get_attribute("data-id") for i in range(2)]
     for i in range(2):
         rows.nth(i).locator("input[type=checkbox]").check()
     check("unstar button shown for starred selection", page.locator("#bUnstar").is_visible() and not page.locator("#bKeep").is_visible())
     page.click("#bUnstar")
     check("marked repos leave their lists and get a view", page.locator("#vUnstar").is_visible()
-          and page.locator("#nUnstar").inner_text() == "2" and fin.locator(".n").inner_text() == str(fin_n - 2))
+          and page.locator("#nUnstar").inner_text() == "2" and fin.locator(".n").text_content() == str(fin_n - 2))
     page.locator("#toast").wait_for(state="visible")
     page.click("#toastUndo")
-    check("undo removes the unstar mark", page.locator("#vUnstar").is_hidden() and fin.locator(".n").inner_text() == str(fin_n))
+    check("undo removes the unstar mark", page.locator("#vUnstar").is_hidden() and fin.locator(".n").text_content() == str(fin_n))
     page.click("#btnRedo")
     page.click("#vUnstar")
     check("unstar view lists the marked repos", rows.count() == 2 and rows.first.locator(".tag.del").inner_text() == "将取消 star")
     page.screenshot(path=str(OUT / "13-unstar-view.png"))
     rows.first.locator("[data-act=keep-star]").click()
     check("keep star puts the repo back in its lists", page.locator("#nUnstar").inner_text() == "1"
-          and fin.locator(".n").inner_text() == str(fin_n - 1))
+          and fin.locator(".n").text_content() == str(fin_n - 1))
     kept = [i for i in ids if page.locator(f'#rows .row[data-id="{i}"]').count() == 0]
     gone_id = next(i for i in ids if i not in kept)
     page.reload()
@@ -412,8 +361,8 @@ with sync_playwright() as p:
     check("restore brings the stars back", g.view()["starred"] == starred_before)
     # -- AI assistant drawer (fake AI): each answer edits the draft as one undoable step
     muts = g.mutations
-    def count(name: str) -> int:
-        return int(page.locator("#lists .litem", has_text=name).first.locator(".n").inner_text())
+    def count(name: str) -> int:  # text_content: the count is hidden (not removed) while the mouse is over the list
+        return int(page.locator("#lists .litem", has_text=name).first.locator(".n").text_content())
     l1, l2 = page.locator("#lists .litem .lname").all_inner_texts()[:2]
     n1, n2 = count(l1), count(l2)
     page.click("#btnChat")

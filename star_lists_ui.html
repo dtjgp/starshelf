@@ -293,26 +293,8 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
 .snap { display: grid; grid-template-columns: 92px 1fr auto; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--rule-2); align-items: center; font-size: 13px; }
 .snap:last-child { border-bottom: 0; }
 .snap .kind { color: var(--ink-2); }
-.ai-mode { margin: 6px 0; padding: 10px 12px; border: 1px solid var(--rule-2); border-radius: 8px; }
-.ai-mode.on { border-color: var(--ink-3); background: var(--sunk); }
-.ai-mode .radio { font-weight: 600; margin: 0; }
-.ai-mode .sub { margin: 4px 0 0 23px; font-size: 13px; color: var(--ink-2); }
-.ai-mode .opts { margin: 8px 0 0 23px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.ai-mode .opts input[type=number] { width: 64px; padding: 3px 6px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); }
-.ai-notes { margin: 12px 0 0; padding: 10px 14px; border-left: 3px solid var(--rule); background: var(--sunk); border-radius: 0 8px 8px 0; font-size: 13.5px; white-space: pre-wrap; }
-.ai-lists { margin-top: 6px; border: 1px solid var(--rule-2); border-radius: 8px; max-height: 340px; overflow: auto; }
-.ai-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--rule-2); font-size: 13px; }
-.ai-row:last-child { border-bottom: 0; }
-.ai-row .star { width: 14px; height: 14px; }
-.ai-row .nm { display: flex; gap: 8px; align-items: center; min-width: 0; }
-.ai-row .nm span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ai-row .cnt { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ai-row .cnt .pc { margin-left: 8px; }
-.ai-row.doomed .nm span:first-child { text-decoration: line-through; color: var(--ink-3); }
 .warn { margin-top: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--remove) 40%, var(--rule)); font-size: 13px; }
 .warn b { color: var(--remove); }
-.ai-backend { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); }
-.ai-backend .small { flex-basis: 100%; }
 .setup { margin: 8px 0 0; padding: 8px 10px; background: var(--panel); border-radius: 6px; font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }
 
 /* ---------- toast & drag ---------- */
@@ -400,7 +382,6 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
       <button id="btnRefresh" class="ghost">重新读取</button>
       <button id="btnDiscard" class="ghost danger">放弃修改</button>
       <button id="btnChat" title="和 AI 对话，随时调整草稿（不会直接写入 GitHub）">AI 助手</button>
-      <button id="btnAI" title="让 Claude 给出归类建议（只改草稿，不会直接写入 GitHub）">AI 建议</button>
       <button id="btnReview" class="primary">预览修改<span id="changeCount" class="count">0</span></button>
     </div>
   </header>
@@ -509,11 +490,6 @@ details pre { max-height: 220px; overflow: auto; background: var(--sunk); border
 <dialog id="reviewDialog" class="wide" aria-label="预览修改">
   <div class="dlg" id="rvBody"></div>
   <div class="dlg-actions" id="rvActions"></div>
-</dialog>
-
-<dialog id="aiDialog" class="wide" aria-label="AI 归类建议">
-  <div class="dlg" id="aiBody"></div>
-  <div class="dlg-actions" id="aiActions"></div>
 </dialog>
 
 <dialog id="backupDialog" class="wide" aria-labelledby="bkTitle">
@@ -812,7 +788,6 @@ function renderTop() {
   const refresh = $("#btnRefresh");
   refresh.disabled = s.total > 0 || running;
   refresh.title = s.total > 0 ? "有未应用的修改时不能重新读取。请先应用或放弃修改。" : "从 GitHub 读取最新的 star 和列表";
-  $("#btnAI").textContent = AI.waiting ? "AI 生成中…" : AI.proposal ? "查看 AI 建议" : "AI 建议";
   const review = $("#btnReview");
   review.replaceChildren();
   if (running) {
@@ -1380,272 +1355,12 @@ $("#reviewDialog").addEventListener("close", () => {
   if (jobRunning()) setTimeout(() => { const d = $("#reviewDialog"); if (!d.open) d.showModal(); renderProgress(S.job); }, 0);
 });
 
-// ------------------------------------------------------------------ AI suggestions
-// Claude proposes lists (the server makes the API call). The page shows what would change and
-// touches only the draft, as one undoable edit, when the user says so. Nothing here writes to GitHub.
-const AI = {
-  form: { mode: "incremental", scope: "none", allowNew: true, maxLists: 12, instructions: "", backend: null },
-  status: null, waiting: null, proposal: null, poll: null, error: "",
-};
-const scopeCount = () => [...S.repos.values()].filter(r => (r.starred || inAny(r.id)) && !S.unstar.has(r.id)).length;
-const elapsedText = s => `已用时 ${Math.round(s || 0)} 秒。可以先关掉这个窗口继续编辑，生成好后会自动弹出。`;
-
-async function openAI() {
-  closePopover();
-  $("#toast").hidden = true;
-  const dlg = $("#aiDialog");
-  if (!dlg.open) dlg.showModal();
-  if (AI.proposal) { renderAIResult(); return; }
-  $("#aiBody").replaceChildren(h("h2", {}, "AI 归类建议"), h("p", { class: "lead" }, "正在检查 AI 设置…"));
-  $("#aiActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "关闭"));
-  try {
-    const j = await api("GET", "/api/suggest");
-    if (j.ai) AI.status = j.ai;
-    if (AI.waiting && j.id === AI.waiting && j.status === "running") renderAIRunning(j);
-    else renderAIForm();
-  } catch (err) {
-    $("#aiBody").append(h("p", { class: "errtext" }, err.message));
-  }
-}
-
+// ------------------------------------------------------------------ AI backend choice (used by the assistant)
+// AI.status comes from GET /api/chat: the available backends (Claude Code / Codex) and the default.
+const AI = { status: null, form: { backend: null } };
 const BACKEND_KEY = "sl-ai-backend";
 function rememberedBackend() { try { return localStorage.getItem(BACKEND_KEY); } catch (_) { return null; } }
 function rememberBackend(id) { try { localStorage.setItem(BACKEND_KEY, id); } catch (_) {} }
-
-function renderAIForm() {
-  const f = AI.form, dlg = $("#aiDialog");
-  const backends = (AI.status && AI.status.backends) || [];
-  if (!backends.some(b => b.id === f.backend)) {
-    const saved = rememberedBackend();
-    const pick = backends.find(b => b.id === saved && b.available) || backends.find(b => b.id === (AI.status || {}).default);
-    f.backend = pick ? pick.id : null;
-  }
-  const st = backends.find(b => b.id === f.backend) || {};
-  const nNone = unlistedIds().length, nSel = S.sel.size, nAll = scopeCount();
-  if (f.scope === "sel" && !nSel) f.scope = "none";
-  if (nSel && !AI.scopeTouched) f.scope = "sel";
-  const targets = f.mode === "reorganize" ? nAll : (f.scope === "sel" ? nSel : nNone);
-  const mode = (value, title, sub, opts) => h("div", { class: "ai-mode" + (f.mode === value ? " on" : "") },
-    h("label", { class: "radio" }, h("input", { type: "radio", name: "aimode", value, checked: f.mode === value,
-      onchange: () => { f.mode = value; renderAIForm(); } }), title),
-    h("p", { class: "sub" }, sub),
-    f.mode === value ? h("div", { class: "opts" }, opts) : null);
-  const scopeSel = h("select", { id: "aiScope", "aria-label": "要归类的仓库",
-    onchange: e => { f.scope = e.target.value; AI.scopeTouched = true; renderAIForm(); } },
-    h("option", { value: "none", selected: f.scope === "none" }, `不在任何列表的 ${nNone} 个仓库`),
-    nSel ? h("option", { value: "sel", selected: f.scope === "sel" }, `已选的 ${nSel} 个仓库`) : null);
-  const allowNew = h("input", { type: "checkbox", id: "aiAllowNew", checked: f.allowNew, onchange: e => { f.allowNew = e.target.checked; } });
-  const maxLists = h("input", { type: "number", id: "aiMax", min: "2", max: "50", value: String(f.maxLists),
-    onchange: e => { f.maxLists = Math.min(50, Math.max(2, parseInt(e.target.value, 10) || 12)); e.target.value = f.maxLists; } });
-  const instr = h("textarea", { id: "aiInstr", rows: "3", maxlength: "2000",
-    placeholder: "例如：按研究方向分；列表名用英文并带 emoji；量化金融相关的都放进 Finance",
-    oninput: e => { f.instructions = e.target.value; } });
-  instr.value = f.instructions;
-  const backendSel = h("select", { id: "aiBackend", "aria-label": "使用哪个 AI",
-    onchange: e => { f.backend = e.target.value; rememberBackend(f.backend); AI.error = ""; renderAIForm(); } },
-    backends.map(b => h("option", { value: b.id, selected: b.id === f.backend }, b.label + (b.available ? "" : "（不可用）"))));
-  const body = [
-    h("h2", {}, "AI 归类建议"),
-    h("p", { class: "lead" }, "AI 会读取仓库的名称、语言和简介，给出归类建议。你先看建议，再决定是否放进草稿；写入 GitHub 仍需「预览修改」确认。"),
-    h("div", { class: "ai-backend" }, h("label", { for: "aiBackend" }, "使用"), backendSel,
-      st.note ? h("span", { class: "small", id: "aiNote" }, st.note) : null),
-    st.warning && st.available !== false ? h("div", { class: "warn", id: "aiWarn" }, h("b", {}, "安全提示："), st.warning) : null,
-    h("fieldset", {}, h("legend", {}, "怎么归类"),
-      mode("incremental", "增量归类", "保留现有列表，只给仓库找合适的列表，不会移走已有的归类。", [
-        h("label", {}, "范围：", scopeSel),
-        h("label", { class: "check" }, allowNew, "需要时可以新建列表（最多 3 个）")]),
-      mode("reorganize", "整体重排", `重新设计全部列表，并重新分配 ${nAll} 个仓库。现有列表可能被改名、合并或删除（仓库仍保持 star）。`, [
-        h("label", {}, "列表数量上限 ", maxLists)])),
-    h("label", { class: "field" }, "额外要求（可选）", instr),
-    h("p", { class: "foot" }, `会把仓库名、语言、简介和列表名发送给 ${st.provider || "AI 服务"}（${st.label || "AI"}，模型 ${st.model || "默认"}），不会发送 GitHub token。仓库越多，等待越久。`),
-  ];
-  if (!backends.length) body.push(h("p", { class: "errtext" }, "没有可用的 AI 选项。"));
-  if (st.available === false) {
-    body.push(h("div", { class: "errors" }, h("b", {}, "AI 还不能用：" + st.reason),
-      (st.setup || []).length ? h("pre", { class: "setup" }, st.setup.join("\n")) : null));
-  }
-  if (f.mode === "incremental" && !targets) body.push(h("p", { class: "errtext" }, "所有 star 都已经归入列表了。可以先勾选一些仓库，或者改用整体重排。"));
-  if (AI.error) body.push(h("p", { class: "errtext", id: "aiError" }, AI.error));
-  const go = h("button", { class: "primary", id: "aiGo", disabled: !st.available || !targets, onclick: startAI },
-    `生成建议（${targets} 个仓库）`);
-  $("#aiBody").replaceChildren(...body);
-  $("#aiActions").replaceChildren(h("span", { class: "spacer" }), h("button", { onclick: () => dlg.close() }, "取消"), go);
-}
-
-async function startAI() {
-  const f = AI.form;
-  const body = { mode: f.mode, backend: f.backend, exclude: [...S.unstar], instructions: f.instructions.trim(), max_lists: f.maxLists, allow_new: f.allowNew,
-    lists: alive().map(l => ({ key: l.key, name: l.name.trim(), description: l.description, items: [...l.items] })) };
-  if (f.mode === "incremental") body.targets = f.scope === "sel" ? [...S.sel] : unlistedIds();
-  AI.error = "";
-  $("#aiGo").disabled = true;
-  try {
-    const j = await api("POST", "/api/suggest", body);
-    AI.waiting = j.id; AI.proposal = null;
-    renderAIRunning(j); pollAI(); renderTop();
-  } catch (err) {
-    AI.error = err.message;
-    renderAIForm();
-  }
-}
-
-function renderAIRunning(j) {
-  const dlg = $("#aiDialog");
-  if (!dlg.open) return;
-  $("#aiBody").replaceChildren(h("h2", {}, `${j.label || "AI"} 正在整理…`),
-    h("p", { class: "lead" }, `${j.mode === "reorganize" ? "整体重排" : "增量归类"}：正在分析 ${j.n_repos} 个仓库。`),
-    h("div", { class: "bar indet" }, h("i")),
-    h("p", { class: "small muted", id: "aiElapsed" }, elapsedText(j.elapsed)));
-  $("#aiActions").replaceChildren(
-    h("button", { class: "ghost danger", onclick: () => { stopAIPoll(); AI.waiting = null; renderTop(); renderAIForm(); } }, "放弃这次建议"),
-    h("span", { class: "spacer" }),
-    h("button", { onclick: () => dlg.close() }, "在后台继续"));
-}
-
-function stopAIPoll() { clearInterval(AI.poll); AI.poll = null; }
-function pollAI() {
-  stopAIPoll();
-  AI.poll = setInterval(async () => {
-    let j;
-    try { j = await api("GET", "/api/suggest"); } catch (_) { return; }   // keep polling
-    if (j.id !== AI.waiting) { stopAIPoll(); return; }
-    const dlg = $("#aiDialog");
-    if (j.status === "running") {
-      const el = $("#aiElapsed");
-      if (el && dlg.open) el.textContent = elapsedText(j.elapsed);
-      return;
-    }
-    stopAIPoll(); AI.waiting = null;
-    if (j.ai) AI.status = j.ai;
-    const free = dlg.open || !document.querySelector("dialog[open]");
-    if (j.status === "done") {
-      AI.proposal = j.result;
-      AI.resultLabel = j.label || "";
-      if (free) { if (!dlg.open) dlg.showModal(); renderAIResult(); }
-      else toast("AI 建议已生成，点「查看 AI 建议」", false);
-    } else {
-      AI.error = j.error || "出现了未知错误。";
-      if (free) { if (!dlg.open) dlg.showModal(); renderAIForm(); }
-      else toast("AI 建议没有生成成功，点「AI 建议」查看原因", false);
-    }
-    renderTop();
-  }, 1000);
-}
-
-// The proposal applied to a copy of the current draft. replace = the complete new set of lists
-// (lists it does not name are deleted); otherwise it only adds repos to lists.
-function applyProposal(p) {
-  const lists = serializeLists();
-  const byKey = new Map(lists.map(l => [l.key, l]));
-  const kept = new Set();
-  const twinOf = name => lists.find(l => !l.deleted && !kept.has(l.key) && l.name.toLowerCase() === name.toLowerCase());
-  let seq = S.newSeq;
-  for (const pl of p.lists) {
-    const items = pl.items.filter(id => S.repos.has(id));
-    let l = pl.key ? byKey.get(pl.key) : null;
-    if (l && (l.deleted || kept.has(l.key))) l = null;
-    if (!l) l = twinOf(pl.name) || null;
-    if (l) {
-      kept.add(l.key);
-      if (p.replace) { l.name = pl.name; if (pl.description) l.description = pl.description; l.items = [...new Set(items)]; }
-      else l.items = [...new Set([...l.items, ...items])];
-    } else {
-      const nl = { key: `new-${seq++}`, id: null, name: pl.name, description: pl.description || "", private: false,
-                   deleted: false, color: null, items: [...new Set(items)] };
-      lists.push(nl); kept.add(nl.key);
-    }
-  }
-  let out = lists;
-  if (p.replace) {
-    out = lists.filter(l => kept.has(l.key) || l.id);      // a draft-only list the AI dropped just disappears
-    out.forEach(l => { if (!kept.has(l.key)) l.deleted = true; });
-  }
-  for (const l of out) if (l.color == null) l.color = leastUsed(out.filter(x => !x.deleted && x.color != null));
-  return { lists: out, newSeq: seq };
-}
-
-function proposalDiff(next) {
-  const cur = new Map(serializeLists().filter(l => !l.deleted).map(l => [l.key, l]));
-  const nextAlive = next.filter(l => !l.deleted);
-  const nextKeys = new Set(nextAlive.map(l => l.key));
-  const members = arr => {
-    const m = new Map();
-    for (const l of arr) for (const id of l.items) { if (!m.has(id)) m.set(id, new Set()); m.get(id).add(l.key); }
-    return m;
-  };
-  const a = members([...cur.values()]), b = members(nextAlive);
-  let moved = 0;
-  for (const id of new Set([...a.keys(), ...b.keys()])) {
-    const x = a.get(id) || new Set(), y = b.get(id) || new Set();
-    if (x.size !== y.size || [...x].some(k => !y.has(k))) moved++;
-  }
-  return {
-    cur, nextAlive, moved,
-    created: nextAlive.filter(l => !cur.has(l.key)),
-    renamed: nextAlive.filter(l => cur.has(l.key) && cur.get(l.key).name !== l.name),
-    removed: [...cur.values()].filter(l => !nextKeys.has(l.key)),
-  };
-}
-
-function renderAIResult() {
-  const p = AI.proposal, dlg = $("#aiDialog");
-  const d = proposalDiff(applyProposal(p).lists);
-  const parts = [];
-  if (d.created.length) parts.push(`新建 ${d.created.length} 个列表`);
-  if (d.renamed.length) parts.push(`改名 ${d.renamed.length} 个`);
-  if (d.removed.length) parts.push(`删除 ${d.removed.length} 个`);
-  parts.push(`调整 ${d.moved} 个仓库的归属`);
-  const show = p.replace ? d.nextAlive
-    : d.nextAlive.filter(l => !d.cur.has(l.key) || l.items.length !== d.cur.get(l.key).items.length);
-  const rows = show.map(l => {
-    const old = d.cur.get(l.key);
-    const before = new Set(old ? old.items : []), after = new Set(l.items);
-    const plus = l.items.filter(id => !before.has(id)).length;
-    const minus = old ? old.items.filter(id => !after.has(id)).length : 0;
-    return h("div", { class: "ai-row" }, star(colorOf(l)),
-      h("span", { class: "nm" }, h("span", { title: l.description || l.name }, l.name),
-        !old ? h("span", { class: "badge" }, "新建") : null,
-        old && old.name !== l.name ? h("span", { class: "badge", title: "原名：" + old.name }, "改名") : null),
-      h("span", { class: "cnt" }, `${l.items.length} 个`,
-        plus ? h("span", { class: "pc add" }, "+" + plus) : null,
-        minus ? h("span", { class: "pc del" }, "−" + minus) : null));
-  });
-  for (const l of d.removed) rows.push(h("div", { class: "ai-row doomed" }, star(colorOf(l)),
-    h("span", { class: "nm" }, h("span", {}, l.name), h("span", { class: "badge del" }, "将删除")),
-    h("span", { class: "cnt" }, `现有 ${l.items.length} 个，仍保持 star`)));
-  const u = p.usage || {};
-  const any = d.created.length || d.renamed.length || d.removed.length || d.moved;
-  $("#aiBody").replaceChildren(
-    h("h2", {}, p.replace ? "AI 建议的新列表" : "AI 建议的归类"),
-    h("p", { class: "lead", id: "aiSummary" }, parts.join("，") + "。"),
-    p.notes ? h("p", { class: "ai-notes" }, p.notes) : null,
-    h("h3", {}, p.replace ? "放入草稿后的列表" : "会有变化的列表"),
-    h("div", { class: "ai-lists" }, rows),
-    (p.warnings || []).length ? h("ul", { class: "notes" }, p.warnings.map(w => h("li", {}, w))) : null,
-    h("p", { class: "foot" }, "放入草稿后，改动会以金色标出，可以继续手动调整，也可以按 ⌘Z 一步撤销。写入 GitHub 前仍需「预览修改」确认。"),
-    h("p", { class: "foot" }, [AI.resultLabel, u.model ? `模型 ${u.model}` : "",
-      u.input_tokens != null ? `输入 ${fmtNum(u.input_tokens)} tokens` : "",
-      u.output_tokens != null ? `输出 ${fmtNum(u.output_tokens)} tokens` : ""].filter(Boolean).join(" · ")));
-  $("#aiActions").replaceChildren(
-    h("button", { class: "ghost", onclick: () => { AI.proposal = null; renderTop(); renderAIForm(); } }, "重新生成"),
-    h("span", { class: "spacer" }),
-    h("button", { onclick: () => dlg.close() }, "稍后再看"),
-    h("button", { class: "primary", id: "aiAccept", disabled: !any, onclick: acceptAI }, "放入草稿"));
-}
-
-function acceptAI() {
-  const r = applyProposal(AI.proposal);
-  const changed = commit(() => {
-    loadLists(r.lists); S.newSeq = Math.max(S.newSeq, r.newSeq);
-    alive().forEach(l => l.items.forEach(id => S.unstar.delete(id)));   // a repo in a list keeps its star
-  });
-  r.lists.filter(l => !l.id && !l.deleted).forEach(l => rememberColor(l));
-  AI.proposal = null;
-  $("#aiDialog").close();
-  render();
-  toast(changed ? "已把 AI 建议放入草稿" : "草稿已经是这个样子了", changed);
-}
-$("#btnAI").addEventListener("click", openAI);
 
 // ------------------------------------------------------------------ AI assistant (chat drawer)
 // Each turn sends the conversation and the current draft; the AI answers with a reply and a list
@@ -1673,7 +1388,7 @@ async function toggleChat(open) {
   renderChat();
   $("#chatInput").focus();
   if (!AI.status) {
-    try { const j = await api("GET", "/api/suggest"); if (j.ai) AI.status = j.ai; } catch (_) {}
+    try { const j = await api("GET", "/api/chat"); if (j.ai) AI.status = j.ai; } catch (_) {}
     renderChat();
   }
 }

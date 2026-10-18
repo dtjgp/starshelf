@@ -203,8 +203,8 @@ class Job:
                     "finished": self.finished}
 
 
-class SuggestJob:
-    """One AI suggestion run. A newer run replaces an older one; the older thread's result is dropped."""
+class AIJob:
+    """One AI assistant turn. A newer turn replaces an older one; the older thread's result is dropped."""
 
     def __init__(self, seq: int = 0, mode: str = "", n_repos: int = 0, status: str = "idle",
                  backend: str = "", label: str = "") -> None:
@@ -238,8 +238,7 @@ class App:
         self.baseline: Optional[sl.State] = None
         self.job = Job()
         self.suggesters: list[ai.Suggester] = suggesters if suggesters is not None else ai.default_backends()
-        self.suggest_job = SuggestJob()
-        self.chat_job = SuggestJob()
+        self.chat_job = AIJob()
 
     # ---- files
     @property
@@ -358,18 +357,11 @@ class App:
         out.sort(key=lambda s: s.get("fetched_at") or "", reverse=True)
         return {"snapshots": out}
 
-    # ---- AI suggestions (draft only: nothing here writes to GitHub)
+    # ---- AI assistant (draft only: nothing here writes to GitHub)
     def _backends(self) -> dict[str, Any]:
         backends = [s.status() for s in self.suggesters]
         default = next((b["id"] for b in backends if b.get("available")), backends[0]["id"] if backends else "")
         return {"backends": backends, "default": default}
-
-    def suggest_status(self, _: dict[str, Any]) -> dict[str, Any]:
-        job = self.suggest_job
-        out = job.to_json()
-        if job.status != "running":  # status checks start local commands; skip them while polling a run
-            out["ai"] = self._backends()
-        return out
 
     def _pick_backend(self, body: dict[str, Any]) -> tuple[ai.Suggester, dict[str, Any]]:
         wanted = body.get("backend") or self._backends()["default"]
@@ -380,20 +372,6 @@ class App:
         if not status.get("available"):
             raise ai.AIError("\n".join([status.get("reason", "AI 不可用")] + list(status.get("setup") or [])))
         return suggester, status
-
-    def start_suggest(self, body: dict[str, Any]) -> dict[str, Any]:
-        with self.lock:
-            if self.baseline is None:
-                raise sl.StarListsError("还没有读取 GitHub 状态，请刷新页面")
-            suggester, status = self._pick_backend(body)
-            req = ai.parse_request(body, self.baseline)
-            baseline = self.baseline
-            job = SuggestJob(self.suggest_job.id + 1, req.mode, len(req.targets), "running",
-                             suggester.id, status.get("label", suggester.id))
-            self.suggest_job = job
-        threading.Thread(target=self._run_ai, args=(job, lambda: ai.suggest(req, baseline, suggester)),
-                         daemon=True, name="star-lists-suggest").start()
-        return job.to_json()
 
     # ---- AI assistant chat: one turn at a time; the page applies the returned operations to its draft
     def chat_status(self, _: dict[str, Any]) -> dict[str, Any]:
@@ -411,14 +389,14 @@ class App:
             req = ai.parse_chat(body, self.baseline)
             baseline = self.baseline
             n_repos = sum(1 for r in baseline.repos.values() if r.starred)
-            job = SuggestJob(self.chat_job.id + 1, "chat", n_repos, "running",
+            job = AIJob(self.chat_job.id + 1, "chat", n_repos, "running",
                              suggester.id, status.get("label", suggester.id))
             self.chat_job = job
         threading.Thread(target=self._run_ai, args=(job, lambda: ai.chat(req, baseline, suggester)),
                          daemon=True, name="star-lists-chat").start()
         return job.to_json()
 
-    def _run_ai(self, job: SuggestJob, work: Callable[[], dict[str, Any]]) -> None:
+    def _run_ai(self, job: AIJob, work: Callable[[], dict[str, Any]]) -> None:
         try:
             result, error = work(), None
         except sl.StarListsError as exc:
@@ -507,8 +485,6 @@ def make_handler(app: App) -> type[BaseHTTPRequestHandler]:
         ("POST", "/api/apply"): app.apply,
         ("GET", "/api/job"): app.job_status,
         ("GET", "/api/snapshots"): app.snapshots,
-        ("GET", "/api/suggest"): app.suggest_status,
-        ("POST", "/api/suggest"): app.start_suggest,
         ("GET", "/api/chat"): app.chat_status,
         ("POST", "/api/chat"): app.start_chat,
     }

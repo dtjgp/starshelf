@@ -23,9 +23,9 @@ repositories at once — in a local web page, a small macOS app, or from the com
 - **Never unstars by accident.** Only repositories you explicitly mark *Unstar* lose their star:
   they are listed separately in the preview, you must tick a confirmation box, and the star is
   removed as the very last step. A later restore stars them again (with a new star date).
-- **Optional AI assistant and suggestions.** Chat with an AI in a side panel ("move the quant repos
-  to Finance", "split FunProjects into three lists") — each answer edits the draft as one undoable
-  step — or let it propose a whole new layout. AI only ever changes the draft. It runs through your
+- **Optional AI assistant.** Chat with an AI in a side panel ("move the quant repos to Finance",
+  "split FunProjects into three lists") — each answer edits the draft as one undoable step. AI only
+  ever changes the draft. It runs through your
   local **Claude Code** or **Codex** CLI and uses that tool's own subscription — no API key, no extra bill.
 
 ![Preview](docs/screenshots/preview.png)
@@ -82,17 +82,15 @@ With `--yes`, a plan that removes stars also needs `--allow-unstar`.
 
 ![Unstar needs confirmation](docs/screenshots/unstar-confirm.png)
 
-## AI assistant and suggestions
+## AI assistant
 
-- **AI 助手** (AI assistant) opens a chat panel on the right. Tell it what to change in plain words;
-  it answers with a short reply and the changes it made to your draft, which you can undo step by
-  step. It asks back when a request is unclear.
-- **AI 建议** (AI suggestions) proposes a complete new layout, or homes for repositories in no list,
-  and shows a preview before anything enters the draft.
+**AI 助手** (AI assistant) opens a chat panel on the right. Tell it what to change in plain words —
+from a single move to a complete new layout; it answers with a short reply and the changes it made
+to your draft, which you can undo step by step. It asks back when a request is unclear.
 
 ![AI assistant](docs/screenshots/ai-assistant.png)
 
-Both use the backend you pick:
+Pick the backend in the panel:
 
 | Backend | Uses | Notes |
 |---|---|---|
@@ -107,7 +105,7 @@ environment so the subscription login is used.
 
 - The page is served on `127.0.0.1` only; every API call needs a per-run secret, and the Host and
   Origin headers are checked. Your GitHub token stays in the local Python process.
-- Data leaves your computer only to GitHub — and, if you use AI suggestions, the repositories'
+- Data leaves your computer only to GitHub — and, if you use the AI assistant, the repositories'
   names, languages and descriptions plus your list names go to the AI service you chose
   (Anthropic or OpenAI). The GitHub token is never sent to an AI service.
 
