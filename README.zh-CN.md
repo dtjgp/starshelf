@@ -23,8 +23,7 @@
 - **可选的 AI 助手和 AI 建议。** 在右侧对话面板里直接对 AI 说「把量化相关的仓库移到 Finance」
   「把 FunProjects 按主题拆成三个列表」，每次回答都作为一步可撤销的修改写进草稿；也可以让 AI
   一次给出完整的新列表方案。AI 只会改草稿。
-  可以用本机的 **Claude Code** 或 **Codex**（使用它们自己的登录和会员额度），也可以用
-  **Anthropic API**（需要 API key）。
+  通过本机的 **Claude Code** 或 **Codex** 运行，使用它们自己的会员订阅，不需要 API key，也不会另外收费。
 
 ![预览修改](docs/screenshots/preview.png)
 
@@ -34,8 +33,7 @@
 - 带 `user` 权限的 GitHub token。最简单的方式是安装 [GitHub CLI](https://cli.github.com/)，
   运行 `gh auth login` 登录，再运行 `gh auth refresh -h github.com -s user`。也可以设置 `GH_TOKEN`。
 - `pip install pyyaml`：只有命令行的 `layout.yaml` 流程需要。
-- 可选（AI 建议）：已登录的 `claude`（Claude Code）或 `codex` 命令；或者 `pip install anthropic`
-  加 Anthropic API key。
+- 可选（AI 功能）：用会员账号登录好的 `claude`（Claude Code）或 `codex` 命令。
 
 ## 快速开始
 
@@ -92,9 +90,9 @@ python3 star_lists.py restore stars_backup/snapshots/<文件>.json
 |---|---|---|
 | Claude Code（默认） | `claude -p`，使用 Claude Code 的登录 | 不开任何工具、不加载 MCP 服务器和用户设置。 |
 | Codex | `codex exec`，使用 Codex / ChatGPT 的登录 | 在空文件夹的只读沙箱里运行，但无法完全关掉它的工具；页面会显示安全提示。 |
-| Anthropic API | `anthropic` 库 + `ANTHROPIC_API_KEY`，或 macOS 钥匙串里用 `security add-generic-password -s "Starshelf" -a anthropic-api-key -w` 保存的 key | 按用量付费。 |
 
-可以用 `STAR_LISTS_CLAUDE_MODEL`、`STAR_LISTS_CODEX_MODEL`、`STAR_LISTS_AI_MODEL` 更换模型。
+可以用 `STAR_LISTS_CLAUDE_MODEL`、`STAR_LISTS_CODEX_MODEL` 更换模型。每次调用都计入对应工具的会员用量限额；
+Starshelf 会从命令的环境变量里去掉 API key，确保使用的是会员登录。
 
 ## 隐私与安全
 

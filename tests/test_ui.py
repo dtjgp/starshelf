@@ -261,9 +261,9 @@ with sync_playwright() as p:
     muts = g.mutations
     fake.available = fake_codex.available = False
     page.click("#btnAI")
-    expect(page.locator("#aiBody .errors")).to_contain_text("API key", timeout=10000)
+    expect(page.locator("#aiBody .errors")).to_contain_text("还没有登录", timeout=10000)
     check("AI unavailable: setup shown, start disabled", page.locator("#aiGo").is_disabled()
-          and "security add-generic-password" in page.locator("#aiBody .setup").inner_text())
+          and "claude" in page.locator("#aiBody .setup").inner_text())
     page.locator("#aiActions button", has_text="取消").click()
     fake.available = fake_codex.available = True
     page.click("#btnAI")

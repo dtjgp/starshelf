@@ -6,7 +6,7 @@ either a complete new layout ("reorganize") or homes for repos that are in no li
 ("incremental"). The result is only a *proposal*: the page shows it, the user decides whether
 to put it into the draft, and nothing reaches GitHub until the normal preview/apply step.
 
-Three backends (the page lets the user pick one):
+Two backends, both using a subscription the person already has (the page lets them pick one):
 
 * ``claude-code`` - the local Claude Code CLI (``claude -p``), using whatever account it is logged
   into (a Claude subscription counts against its usage limits; no extra charge). Runs with all
@@ -15,10 +15,6 @@ Three backends (the page lets the user pick one):
   tools cannot be switched off completely; it runs read-only in an empty folder, and the page
   warns that injected text in repo descriptions could make it read local files.
   Model: Codex's default (``STAR_LISTS_CODEX_MODEL``).
-* ``api`` - the Anthropic API with the ``anthropic`` package and an API key in
-  ``ANTHROPIC_API_KEY`` or the macOS keychain
-  (``security add-generic-password -s "Starshelf" -a anthropic-api-key -w``).
-  Model Claude Opus 5.5 (``STAR_LISTS_AI_MODEL``).
 
 What leaves this computer: repo names, languages, descriptions and list names/descriptions, sent
 to Anthropic (Claude) or OpenAI (Codex). The GitHub token is never sent.
@@ -31,7 +27,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -40,11 +35,7 @@ from typing import Any, Optional, Protocol
 
 import star_lists as sl
 
-DEFAULT_MODEL = "claude-opus-5-5"
 DEFAULT_EFFORT = "medium"
-KEYCHAIN_SERVICE = "Starshelf"
-KEYCHAIN_LEGACY_SERVICES = ("Star Lists",)  # the name before the rename; still read
-KEYCHAIN_ACCOUNT = "anthropic-api-key"
 MODES = ("reorganize", "incremental")
 NAME_MAX = 100          # same limit as the list dialog in the page
 DESC_MAX = 300
@@ -52,12 +43,6 @@ REPO_DESC_MAX = 160     # repo descriptions are cut to keep the prompt small
 EXAMPLES_PER_LIST = 25  # incremental mode shows this many members per list as context
 MAX_NEW_INCREMENTAL = 3
 INSTRUCTIONS_MAX = 2000
-
-SETUP_KEY = [
-    "在终端运行下面这行，然后粘贴你的 Anthropic API key（输入时不显示）：",
-    f'security add-generic-password -s "{KEYCHAIN_SERVICE}" -a {KEYCHAIN_ACCOUNT} -w',
-    "或者在启动 star_lists_ui.py 的终端里设置环境变量 ANTHROPIC_API_KEY。",
-]
 
 
 class AIError(sl.StarListsError):
@@ -633,97 +618,6 @@ class Suggester(Protocol):
         """Return (parsed JSON answer, usage info)."""
 
 
-def _keychain(read: bool) -> Optional[str]:
-    """The API key stored in the macOS login keychain (read=False only checks it exists)."""
-    if sys.platform != "darwin":
-        return None
-    for service in (KEYCHAIN_SERVICE, *KEYCHAIN_LEGACY_SERVICES):
-        cmd = ["security", "find-generic-password", "-s", service, "-a", KEYCHAIN_ACCOUNT]
-        try:
-            res = subprocess.run(cmd + (["-w"] if read else []), capture_output=True, text=True, timeout=20)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        if res.returncode == 0:
-            return res.stdout.strip() if read else "present"
-    return None
-
-
-class ClaudeSuggester:
-    """Calls the Anthropic Messages API with a JSON-schema constrained answer."""
-
-    def __init__(self, model: Optional[str] = None, effort: str = DEFAULT_EFFORT) -> None:
-        self.model = model or os.environ.get("STAR_LISTS_AI_MODEL") or DEFAULT_MODEL
-        self.effort = effort
-
-    id = "api"
-
-    def status(self) -> dict[str, Any]:
-        base = {"id": self.id, "label": "Anthropic API", "provider": "Anthropic", "model": self.model,
-                "note": "按 API 用量付费。", "warning": "", "python": sys.executable}
-        try:
-            import anthropic  # noqa: F401
-        except ImportError:
-            return {**base, "available": False, "reason": "运行 Starshelf 的 Python 没有安装 anthropic 库。",
-                    "setup": ["在终端运行：", f'"{sys.executable}" -m pip install anthropic', "然后重新打开 Starshelf。"]}
-        if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or _keychain(read=False):
-            return {**base, "available": True, "reason": "", "setup": []}
-        return {**base, "available": False, "reason": "没有找到 Anthropic API key。", "setup": SETUP_KEY}
-
-    def complete(self, prompt: Prompt) -> tuple[dict[str, Any], dict[str, Any]]:
-        try:
-            import anthropic
-        except ImportError:
-            raise AIError("没有安装 anthropic 库：" + f'"{sys.executable}" -m pip install anthropic') from None
-        if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-            client = anthropic.Anthropic()
-        else:
-            key = _keychain(read=True)
-            if not key:
-                raise AIError("没有找到 Anthropic API key。\n" + "\n".join(SETUP_KEY))
-            client = anthropic.Anthropic(api_key=key)
-        try:
-            # Streaming keeps a long answer clear of HTTP timeouts. ``fallbacks: "default"`` lets the
-            # API retry on Anthropic's recommended model if a safety classifier declines the request.
-            with client.beta.messages.stream(
-                model=self.model,
-                max_tokens=64000,
-                system=prompt.system,
-                messages=[{"role": "user", "content": prompt.user}],
-                output_config={"effort": self.effort,
-                               "format": {"type": "json_schema", "schema": prompt.schema}},
-                betas=["server-side-fallback-2026-07-01"],
-                extra_body={"fallbacks": "default"},
-            ) as stream:
-                msg = stream.get_final_message()
-        except anthropic.AuthenticationError:
-            raise AIError("Anthropic API key 无效或已过期。请更换 key 后重试。\n" + "\n".join(SETUP_KEY)) from None
-        except anthropic.PermissionDeniedError as exc:
-            raise AIError(f"这个 API key 没有权限使用模型 {self.model}：{exc.message}") from None
-        except anthropic.NotFoundError:
-            raise AIError(f"找不到模型 {self.model}。可以用环境变量 STAR_LISTS_AI_MODEL 换一个模型。") from None
-        except anthropic.RateLimitError:
-            raise AIError("Anthropic API 的调用次数或额度已达上限，请稍后再试。") from None
-        except anthropic.BadRequestError as exc:
-            raise AIError(f"Anthropic API 拒绝了请求：{exc.message}") from None
-        except anthropic.APIStatusError as exc:
-            raise AIError(f"Anthropic API 暂时出错（HTTP {exc.status_code}），请稍后再试。") from None
-        except anthropic.APIConnectionError:
-            raise AIError("连不上 Anthropic API。请检查网络后重试。") from None
-        if msg.stop_reason == "refusal":
-            raise AIError("Claude 拒绝处理这个请求。可以修改「额外要求」后重试。")
-        if msg.stop_reason == "max_tokens":
-            raise AIError("AI 的回答太长，被截断了。请减少要归类的仓库数量后重试。")
-        text = next((b.text for b in msg.content if getattr(b, "type", "") == "text"), "")
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            raise AIError("AI 返回的内容不是有效的 JSON，请重试。") from None
-        usage = {"backend": self.id, "model": getattr(msg, "model", self.model),
-                 "input_tokens": getattr(msg.usage, "input_tokens", 0) or 0,
-                 "output_tokens": getattr(msg.usage, "output_tokens", 0) or 0}
-        return data, usage
-
-
 CLI_TIMEOUT = 15 * 60
 STATUS_TTL = 60.0
 CODEX_WARNING = ("Codex 是一个能执行命令的 agent，Starshelf 没办法完全关掉它的工具。仓库简介是别人写的文字；"
@@ -928,9 +822,9 @@ class CodexSuggester(_CachedStatus):
             raise AIError("Codex 返回的内容不是有效的 JSON，请重试。") from None
 
 
-def default_backends(api_model: Optional[str] = None) -> list[Suggester]:
+def default_backends() -> list[Suggester]:
     """In the order the page offers them (the first available one is the default)."""
-    return [ClaudeCodeSuggester(), CodexSuggester(), ClaudeSuggester(api_model)]
+    return [ClaudeCodeSuggester(), CodexSuggester()]
 
 
 def suggest(req: SuggestRequest, baseline: sl.State, suggester: Suggester) -> dict[str, Any]:

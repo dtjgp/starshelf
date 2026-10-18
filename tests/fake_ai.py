@@ -1,4 +1,4 @@
-"""Stand-in for ClaudeSuggester: answers from the prompt text, without any network or API key."""
+"""Stand-in for the Claude Code / Codex backends: answers from the prompt text, without any network."""
 from __future__ import annotations
 
 import re
@@ -114,7 +114,7 @@ class FakeSuggester:
                 "note": f"{self.label} 的说明", "warning": self.warning}
         if self.available:
             return {**base, "available": True, "reason": "", "setup": []}
-        return {**base, "available": False, "reason": "没有找到 Anthropic API key。", "setup": ai.SETUP_KEY}
+        return {**base, "available": False, "reason": f"{self.label} 还没有登录。", "setup": ["在终端运行：", "claude", "然后按提示登录。"]}
 
     def complete(self, prompt: ai.Prompt) -> tuple[dict[str, Any], dict[str, Any]]:
         self.calls.append(prompt)
