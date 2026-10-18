@@ -101,7 +101,7 @@ with sync_playwright() as p:
     check("select all visible", page.locator("#countLabel").inner_text() == f"已选 {len(paper_hits)} 个")
     page.click("#bAdd")
     page.locator("#popover .opt", has_text="Research & Writing").click()
-    check("bulk add updates list count", new_item.locator(".n").inner_text() == str(len(paper_hits)))
+    check("bulk add updates list count", new_item.locator(".n").text_content() == str(len(paper_hits)))
     page.screenshot(path=str(OUT / "03-bulk-added.png"))
     page.fill("#q", "")
     page.click("#bDeselect")
@@ -283,24 +283,24 @@ with sync_playwright() as p:
     starred_before = g.view()["starred"]
     fin = page.locator("#lists .litem", has_text="Finance")
     fin.locator("[data-act=view]").click()
-    fin_n = int(fin.locator(".n").inner_text())
+    fin_n = int(fin.locator(".n").text_content())
     ids = [rows.nth(i).get_attribute("data-id") for i in range(2)]
     for i in range(2):
         rows.nth(i).locator("input[type=checkbox]").check()
     check("unstar button shown for starred selection", page.locator("#bUnstar").is_visible() and not page.locator("#bKeep").is_visible())
     page.click("#bUnstar")
     check("marked repos leave their lists and get a view", page.locator("#vUnstar").is_visible()
-          and page.locator("#nUnstar").inner_text() == "2" and fin.locator(".n").inner_text() == str(fin_n - 2))
+          and page.locator("#nUnstar").inner_text() == "2" and fin.locator(".n").text_content() == str(fin_n - 2))
     page.locator("#toast").wait_for(state="visible")
     page.click("#toastUndo")
-    check("undo removes the unstar mark", page.locator("#vUnstar").is_hidden() and fin.locator(".n").inner_text() == str(fin_n))
+    check("undo removes the unstar mark", page.locator("#vUnstar").is_hidden() and fin.locator(".n").text_content() == str(fin_n))
     page.click("#btnRedo")
     page.click("#vUnstar")
     check("unstar view lists the marked repos", rows.count() == 2 and rows.first.locator(".tag.del").inner_text() == "将取消 star")
     page.screenshot(path=str(OUT / "13-unstar-view.png"))
     rows.first.locator("[data-act=keep-star]").click()
     check("keep star puts the repo back in its lists", page.locator("#nUnstar").inner_text() == "1"
-          and fin.locator(".n").inner_text() == str(fin_n - 1))
+          and fin.locator(".n").text_content() == str(fin_n - 1))
     kept = [i for i in ids if page.locator(f'#rows .row[data-id="{i}"]').count() == 0]
     gone_id = next(i for i in ids if i not in kept)
     page.reload()
@@ -361,8 +361,8 @@ with sync_playwright() as p:
     check("restore brings the stars back", g.view()["starred"] == starred_before)
     # -- AI assistant drawer (fake AI): each answer edits the draft as one undoable step
     muts = g.mutations
-    def count(name: str) -> int:
-        return int(page.locator("#lists .litem", has_text=name).first.locator(".n").inner_text())
+    def count(name: str) -> int:  # text_content: the count is hidden (not removed) while the mouse is over the list
+        return int(page.locator("#lists .litem", has_text=name).first.locator(".n").text_content())
     l1, l2 = page.locator("#lists .litem .lname").all_inner_texts()[:2]
     n1, n2 = count(l1), count(l2)
     page.click("#btnChat")
