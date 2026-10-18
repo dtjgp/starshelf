@@ -8,7 +8,7 @@ Organise your **GitHub Star Lists** in bulk. GitHub's web page changes one repos
 starshelf lets you create, rename and delete lists, and add, move or remove hundreds of starred
 repositories at once — in a local web page, a small macOS app, or from the command line.
 
-![All stars](docs/screenshots/all-stars.png)
+![All stars](docs/screenshots/en/all-stars.png)
 
 ## What it does
 
@@ -27,11 +27,10 @@ repositories at once — in a local web page, a small macOS app, or from the com
   "split FunProjects into three lists") — each answer edits the draft as one undoable step. AI only
   ever changes the draft. It runs through your
   local **Claude Code** or **Codex** CLI and uses that tool's own subscription — no API key, no extra bill.
-- **English or Chinese.** Switch the language in the top-right corner of the page. The choice is
-  remembered; the first time, the page follows your browser or system language. Messages from the
-  server, the AI assistant's replies and the macOS app's menus follow the same choice.
+- **English or Chinese.** One switch in the top-right corner changes the whole interface — see
+  [Language](#language).
 
-![Preview](docs/screenshots/preview.png)
+![Preview](docs/screenshots/en/preview.png)
 
 ## Requirements
 
@@ -83,7 +82,7 @@ python3 star_lists.py restore stars_backup/snapshots/<file>.json
 
 With `--yes`, a plan that removes stars also needs `--allow-unstar`.
 
-![Unstar needs confirmation](docs/screenshots/unstar-confirm.png)
+![Unstar needs confirmation](docs/screenshots/en/unstar-confirm.png)
 
 ## AI assistant
 
@@ -101,7 +100,7 @@ from a single move to a complete new layout. It asks back when a request is uncl
 - Drag the panel's left edge to make it wider or narrower (or focus the edge and use ← / →;
   double-click resets it). The width is remembered.
 
-![AI assistant](docs/screenshots/ai-assistant.png)
+![AI assistant](docs/screenshots/en/ai-assistant.png)
 
 Pick the backend in the panel:
 
@@ -113,6 +112,26 @@ Pick the backend in the panel:
 Models can be changed with `STAR_LISTS_CLAUDE_MODEL` and `STAR_LISTS_CODEX_MODEL`. Each run counts
 against that tool's subscription usage limits; Starshelf removes API-key variables from the CLI's
 environment so the subscription login is used.
+
+## Language
+
+The interface is available in **English** and **Simplified Chinese** (简体中文). Pick one with the
+switch at the right end of the top bar (next to **Preview changes**). The page redraws at once and
+keeps your draft, selection and open panel.
+
+- **What follows the choice:** every label, dialog and message on the page; messages from the local
+  server (errors, apply progress, warnings in the preview); the AI assistant's replies and its setup
+  hints; and, in the macOS app, the menus, the quit dialog and the start-up pages.
+- **The first time** (nothing chosen yet), the language comes from the launcher: the macOS app uses
+  your system language, `star_lists_ui.py` uses `LANG` / `LC_ALL` or `--lang en|zh`. Without a hint,
+  the page follows the browser's language.
+- **Remembered** per browser (and in the app, which also keeps it in the user default `SLLanguage`):
+  ```bash
+  defaults write io.github.dtjgp.starshelf SLLanguage en    # or zh
+  ```
+- **Not translated:** your own data (repository descriptions, list names), chat messages already
+  written, the technical apply log and GitHub's own error texts (always English), and the
+  command-line tool (English).
 
 ## Privacy and security
 
@@ -131,7 +150,8 @@ pip install pyyaml playwright && python3 -m playwright install chromium
 python3 tests/test_engine.py
 python3 tests/test_lifecycle.py
 python3 tests/test_ai.py
-python3 tests/test_ui.py          # browser click-through on a made-up account
+python3 tests/test_ui.py          # browser click-through on a made-up account, in Chinese and English
+python3 tests/make_screenshots.py # redraws the README screenshots (docs/screenshots, docs/screenshots/en)
 ```
 
 ## Limitations
