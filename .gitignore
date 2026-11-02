@@ -1,5 +1,6 @@
 # personal data: your stars, lists, backups, drafts; local agent notes
 CLAUDE.md
+local-notes/
 stars_backup/
 tests/fixtures/snapshot.json
 tests/.shots/
